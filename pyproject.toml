@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microcompta"
+version = "0.1.0"
+description = "Light personal accounting desktop app for a French micro-entrepreneur"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.7",
+    "duckdb>=2.0,<3",
+    "reportlab>=4.0",
+    "requests>=2.31",
+    "truststore>=0.9",
+]
+
+[project.scripts]
+microcompta = "microcompta.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["microcompta*"]
+
+[tool.setuptools.package-data]
+microcompta = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

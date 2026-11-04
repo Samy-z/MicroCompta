@@ -1,0 +1,39 @@
+{
+  "_comment": "Seed values, inserted once and never overwritten: edits under Settings > Figures win. To change a figure over time, add a row with a later effective_from. Sources checked 2026-11-04 unless noted.",
+  "figures": [
+    {"key": "micro_ceiling", "effective_from": "2026-01-01", "value": "83600", "unit": "eur", "label": "Micro ceiling, services and liberal activities", "source": "https://www.impots.gouv.fr/professionnel/questions/en-tant-que-micro-entrepreneur-sous-quelles-conditions-puis-je-opter-pour-l", "note": "Set for 2026-2028."},
+    {"key": "proration_days_basis", "effective_from": "2026-01-01", "value": "365", "unit": "days", "label": "Days in the first-year proration", "source": "URSSAF example (83,600 x 306 / 365), seen through a search result; BOFiP BOI-TVA-DECLA-40-10-10 s.290 for VAT", "note": "A first-year limit never exceeds the full amount, including a 1 January start in a leap year."},
+
+    {"key": "vat_base", "effective_from": "2026-01-01", "value": "37500", "unit": "eur", "label": "VAT franchise, services: base limit", "source": "https://www.impots.gouv.fr/professionnel/questions/en-tant-que-micro-entrepreneur-puis-je-etre-redevable-de-la-tva", "note": "Above it: the franchise ends on 1 January of the next year."},
+    {"key": "vat_upper", "effective_from": "2026-01-01", "value": "41250", "unit": "eur", "label": "VAT franchise, services: upper limit", "source": "https://www.impots.gouv.fr/professionnel/questions/en-tant-que-micro-entrepreneur-puis-je-etre-redevable-de-la-tva", "note": "Above it: VAT applies from the day it is crossed."},
+
+    {"key": "bank_account_threshold", "effective_from": "2026-01-01", "value": "10000", "unit": "eur", "label": "Separate bank account: turnover in two consecutive years", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F35991", "note": ""},
+    {"key": "cfe_exempt_turnover", "effective_from": "2026-01-01", "value": "5000", "unit": "eur", "label": "No CFE owed at or below this N-2 turnover", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23999", "note": "First-year turnover may be prorated to 12 months."},
+
+    {"key": "rate_bnc", "effective_from": "2026-01-01", "value": "0.256", "unit": "rate", "label": "Contributions: BNC non-regulated, SSI", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F36232", "note": ""},
+    {"key": "rate_bic", "effective_from": "2026-01-01", "value": "0.212", "unit": "rate", "label": "Contributions: BIC services", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F36232", "note": ""},
+    {"key": "rate_bnc_vl", "effective_from": "2026-01-01", "value": "0.278", "unit": "rate", "label": "Contributions + versement libératoire: BNC", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F36232", "note": ""},
+    {"key": "rate_bic_vl", "effective_from": "2026-01-01", "value": "0.229", "unit": "rate", "label": "Contributions + versement libératoire: BIC services", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F36232", "note": ""},
+    {"key": "acre_multiplier", "effective_from": "2020-01-01", "value": "0.50", "unit": "rate", "label": "ACRE: share of the normal rate, by business start date", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F11677", "note": "For businesses created before 2026-07-01."},
+    {"key": "acre_multiplier", "effective_from": "2026-07-01", "value": "0.75", "unit": "rate", "label": "ACRE: share of the normal rate, by business start date", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F11677", "note": "For businesses created from 2026-07-01. The versement libératoire part is not reduced in the app's calculation, which is an assumption."},
+    {"key": "acre_request_days", "effective_from": "2026-01-01", "value": "60", "unit": "days", "label": "ACRE: days after the start date to request it", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F11677", "note": ""},
+
+    {"key": "allowance_bnc", "effective_from": "2026-01-01", "value": "0.34", "unit": "rate", "label": "Income tax allowance: micro-BNC", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23267", "note": "Information only."},
+    {"key": "allowance_bic", "effective_from": "2026-01-01", "value": "0.50", "unit": "rate", "label": "Income tax allowance: micro-BIC services", "source": "https://www.impots.gouv.fr/particulier/professions-independantes", "note": "Information only."},
+    {"key": "allowance_min", "effective_from": "2026-01-01", "value": "305", "unit": "eur", "label": "Income tax allowance: minimum", "source": "https://www.impots.gouv.fr/professionnel/questions/je-suis-micro-entrepreneur-puis-je-deduire-des-charges", "note": "Information only."},
+
+    {"key": "late_declaration_fine", "effective_from": "2026-01-01", "value": "60.10", "unit": "eur", "label": "Fine for a missed turnover declaration", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23257", "note": "Plus a surcharge on contributions."},
+    {"key": "recovery_indemnity", "effective_from": "2026-01-01", "value": "40", "unit": "eur", "label": "Late-payment recovery indemnity shown on invoices", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23208", "note": ""},
+    {"key": "expert_review_trigger", "effective_from": "2026-01-01", "value": "50000", "unit": "eur", "label": "Suggest an expert-comptable consultation at this run-rate", "source": "Owner's own trigger, not a legal limit", "note": ""},
+    {"key": "near_limit_ratio", "effective_from": "2026-01-01", "value": "0.80", "unit": "rate", "label": "Warn when a limit is this full", "source": "App display setting, not a legal limit", "note": ""},
+
+    {"key": "ereporting_deadline", "effective_from": "2026-01-01", "value": "2027-09-01", "unit": "date", "label": "E-reporting through a plateforme agréée", "source": "https://www.impots.gouv.fr/professionnel/je-decouvre-la-facturation-electronique", "note": "Not done by this app."},
+    {"key": "vat_mention_tolerated_until", "effective_from": "2026-01-01", "value": "2027-12-31", "unit": "date", "label": "Art. 293 B reference tolerated on invoices until", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23208", "note": "Re-read F23208 before this date and edit the mention in Settings if needed."},
+
+    {"key": "cfe_form_md", "effective_from": "2026-01-01", "value": "12-31", "unit": "md", "label": "CFE form 1447-C-SD: month-day, creation year", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23547", "note": ""},
+    {"key": "cfe_payment_md", "effective_from": "2026-01-01", "value": "12-15", "unit": "md", "label": "CFE payment: month-day", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23547", "note": "Nothing is owed in the first year of activity (F23999)."},
+    {"key": "vl_next_year_md", "effective_from": "2026-01-01", "value": "09-30", "unit": "md", "label": "Versement libératoire option for next year: month-day", "source": "Owner's brief, 2026-11-04; the impots.gouv.fr page read covers only the new-business window", "note": ""},
+    {"key": "tax_return_remind_md", "effective_from": "2026-01-01", "value": "04-01", "unit": "md", "label": "Start reminding about form 2042 C PRO: month-day", "source": "App reminder only. The filing date is published each spring", "note": "Not a legal date."},
+    {"key": "figures_review_md", "effective_from": "2026-01-01", "value": "01-15", "unit": "md", "label": "Yearly reminder to re-check this table: month-day", "source": "App reminder only", "note": "Not a legal date."}
+  ]
+}

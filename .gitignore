@@ -1,0 +1,37 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Records: the data directory lives outside the repo, but never let a copy in.
+# Anchored: an unanchored "data/" would also hide microcompta/data/, the seed figures.
+/data/
+documents/
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+*.csv
+
+# Generated invoices and exports. Only assets/ and tests/ may hold a PDF, and neither does.
+*.pdf
+
+# Google credentials: the OAuth client file and the token.
+secrets/
+client_secret*.json
+google_oauth_client*.json
+google_token*.json
+token*.json
+credentials*.json
+
+# Generated shortcuts embed absolute paths for this machine
+*.lnk
+
+# Logs can mention file names
+logs/
+*.log
+
+# Smoke-test output is regenerated; fake data only, but no reason to version it.
+screenshots/
