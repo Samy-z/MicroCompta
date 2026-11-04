@@ -12,6 +12,8 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
+from ..i18n import tr
+
 
 class TrayController(QObject):
     show_requested = Signal()
@@ -33,24 +35,30 @@ class TrayController(QObject):
         menu.addAction(self.status_action)
         menu.addSeparator()
 
-        show = QAction("Show window", menu)
-        show.triggered.connect(self.show_requested.emit)
-        menu.addAction(show)
+        self.show_action = QAction(menu)
+        self.show_action.triggered.connect(self.show_requested.emit)
+        menu.addAction(self.show_action)
 
-        upload = QAction("Upload to Drive now", menu)
-        upload.triggered.connect(self.upload_requested.emit)
-        menu.addAction(upload)
+        self.upload_action = QAction(menu)
+        self.upload_action.triggered.connect(self.upload_requested.emit)
+        menu.addAction(self.upload_action)
         menu.addSeparator()
 
-        quit_action = QAction("Quit MicroCompta", menu)
-        quit_action.triggered.connect(self.quit_requested.emit)
-        menu.addAction(quit_action)
+        self.quit_action = QAction(menu)
+        self.quit_action.triggered.connect(self.quit_requested.emit)
+        menu.addAction(self.quit_action)
 
         # Kept on self: a menu parented to nothing would be collected when this returns,
         # leaving an icon whose right-click does nothing.
         self._menu = menu
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._activated)
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        self.show_action.setText(tr("Show window"))
+        self.upload_action.setText(tr("Upload to Drive now"))
+        self.quit_action.setText(tr("Quit MicroCompta"))
 
     def _activated(self, reason: Any) -> None:
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):

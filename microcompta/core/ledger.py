@@ -12,6 +12,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from ..i18n import N_, tr
 from . import clock
 from .chain import GENESIS, chain_hash
 from .clients import Clients
@@ -20,8 +21,9 @@ from .errors import ImmutableError, ValidationError
 from .ledger_policy import TurnoverPolicy, counted_eur
 from .money import ZERO, round_money, to_decimal
 
-PAYMENT_METHODS = ("Stripe", "PayPal", "Bank transfer", "Other")
-RATE_SOURCES = ("ECB reference", "Provider rate", "Other")
+# Stored as written here, translated when shown.
+PAYMENT_METHODS = ("Stripe", "PayPal", N_("Bank transfer"), N_("Other"))
+RATE_SOURCES = (N_("ECB reference"), N_("Provider rate"), N_("Other"))
 
 
 def _payload(e: dict[str, Any]) -> dict[str, Any]:
@@ -75,31 +77,31 @@ class Ledger:
     ) -> int:
         client = self.clients.get(client_id)
         if client is None:
-            raise ValidationError("Choose a client.")
+            raise ValidationError(tr("Choose a client."))
         description = description.strip()
         if not description:
-            raise ValidationError("A description is required: the ledger must state the origin.")
+            raise ValidationError(tr("A description is required: the ledger must state the origin."))
         if received_on > clock.today():
-            raise ValidationError("The date received cannot be in the future.")
+            raise ValidationError(tr("The date received cannot be in the future."))
         if not payment_method.strip():
-            raise ValidationError("The payment method is required.")
+            raise ValidationError(tr("The payment method is required."))
 
         currency = client["currency"]
-        gross = round_money(to_decimal(amount_gross, "Gross amount"))
+        gross = round_money(to_decimal(amount_gross, tr("Gross amount")))
         if gross <= 0:
-            raise ValidationError("The gross amount must be positive. Corrections are reversals.")
-        rate = to_decimal(fx_rate, "Exchange rate")
+            raise ValidationError(tr("The gross amount must be positive. Corrections are reversals."))
+        rate = to_decimal(fx_rate, tr("Exchange rate"))
         if currency == "EUR":
             rate = Decimal(1)
         if rate <= 0:
-            raise ValidationError("The exchange rate must be positive.")
-        fee = round_money(to_decimal(fee_amount or "0", "Provider fee"))
+            raise ValidationError(tr("The exchange rate must be positive."))
+        fee = round_money(to_decimal(fee_amount or "0", tr("Provider fee")))
         if fee < 0:
-            raise ValidationError("The provider fee cannot be negative.")
+            raise ValidationError(tr("The provider fee cannot be negative."))
         fee_currency = (fee_currency or currency).upper()
-        net = round_money(to_decimal(net_credited, "Net credited"))
+        net = round_money(to_decimal(net_credited, tr("Net credited")))
         if net <= 0:
-            raise ValidationError("The net credited must be positive.")
+            raise ValidationError(tr("The net credited must be positive."))
 
         provider_ref = provider_ref.strip()
         with self.db.transaction():
@@ -110,9 +112,10 @@ class Ledger:
                     [provider_ref, client_id],
                 )
                 if dup is not None:
-                    raise ValidationError(
-                        f"Reference '{provider_ref}' is already recorded as entry {dup}."
-                    )
+                    raise ValidationError(tr(
+                        "Reference '{reference}' is already recorded as entry {entry}.",
+                        reference=provider_ref, entry=dup,
+                    ))
             return self._insert({
                 "kind": "payment",
                 "reverses_seq": None,
@@ -140,15 +143,15 @@ class Ledger:
         so a mistake nets out in the period where it was counted."""
         reason = reason.strip()
         if not reason:
-            raise ValidationError("A reversal needs a reason.")
+            raise ValidationError(tr("A reversal needs a reason."))
         original = self.get(seq)
         if original is None:
-            raise ValidationError(f"Entry {seq} does not exist.")
+            raise ValidationError(tr("Entry {seq} does not exist.", seq=seq))
         if original["kind"] != "payment":
-            raise ImmutableError("A reversal cannot be reversed. Record a new payment instead.")
+            raise ImmutableError(tr("A reversal cannot be reversed. Record a new payment instead."))
         with self.db.transaction():
             if self.db.scalar("SELECT seq FROM ledger WHERE reverses_seq = ?", [seq]) is not None:
-                raise ImmutableError(f"Entry {seq} has already been reversed.")
+                raise ImmutableError(tr("Entry {seq} has already been reversed.", seq=seq))
             return self._insert({
                 "kind": "reversal",
                 "reverses_seq": seq,
@@ -265,12 +268,12 @@ class Ledger:
         for row in self.db.rows("SELECT * FROM ledger ORDER BY seq"):
             seq = int(row["seq"])
             if seq != expected_seq:
-                problems.append(f"Ledger entry {expected_seq} is missing.")
+                problems.append(tr("Ledger entry {seq} is missing.", seq=expected_seq))
                 expected_seq = seq
             if row["prev_hash"] != prev_hash:
-                problems.append(f"Ledger entry {seq} does not follow the entry before it.")
+                problems.append(tr("Ledger entry {seq} does not follow the entry before it.", seq=seq))
             if chain_hash(row["prev_hash"], _payload(row)) != row["entry_hash"]:
-                problems.append(f"Ledger entry {seq} was changed after it was recorded.")
+                problems.append(tr("Ledger entry {seq} was changed after it was recorded.", seq=seq))
             prev_hash = row["entry_hash"]
             expected_seq += 1
         return problems

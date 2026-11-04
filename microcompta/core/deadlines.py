@@ -11,19 +11,19 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
+from ..i18n import N_, fmt_date, month_name, tr
 from . import clock
 from .db import Database
 from .figures import Figures
 from .money import fmt_money
 from .profile import Profile, load_profile
 
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-
-DECLARATION = "Declaration"
-OPTION = "Option"
-TAX = "Tax"
-FILING = "Filing"
-HOUSEKEEPING = "Housekeeping"
+# Stored and compared as written here, translated when shown.
+DECLARATION = N_("Declaration")
+OPTION = N_("Option")
+TAX = N_("Tax")
+FILING = N_("Filing")
+HOUSEKEEPING = N_("Housekeeping")
 
 
 @dataclass(frozen=True)
@@ -79,16 +79,16 @@ def first_quarterly_due(start: date) -> date:
 
 def _period_label(first: date, last: date) -> str:
     if first.year == last.year and first.month == last.month:
-        return f"{MONTHS[first.month - 1]} {first.year}"
+        return f"{month_name(first.month)} {first.year}"
     if first.year == last.year:
-        return f"{MONTHS[first.month - 1]}–{MONTHS[last.month - 1]} {first.year}"
-    return f"{MONTHS[first.month - 1]} {first.year}–{MONTHS[last.month - 1]} {last.year}"
+        return f"{month_name(first.month)}–{month_name(last.month)} {first.year}"
+    return f"{month_name(first.month)} {first.year}–{month_name(last.month)} {last.year}"
 
 
 def _declaration_note(fine: str) -> str:
-    return (
-        f"File with URSSAF even at zero (\"Néant\"). A missed declaration costs {fine} "
-        "plus a surcharge on contributions."
+    return tr(
+        "File with URSSAF even at zero (\"Néant\"). A missed declaration costs {fine} "
+        "plus a surcharge on contributions.", fine=fine,
     )
 
 
@@ -102,7 +102,7 @@ def turnover_declarations(start: date, frequency: str, until: date, fine: str) -
         while due <= until:
             items.append(Deadline(
                 f"declaration:{last.year}-Q{(last.month - 1) // 3 + 1}",
-                f"Turnover declaration: {_period_label(first, last)}",
+                tr("Turnover declaration: {period}", period=_period_label(first, last)),
                 due, DECLARATION, note, period_start=first, period_end=last,
             ))
             first = last + timedelta(days=1)
@@ -115,7 +115,7 @@ def turnover_declarations(start: date, frequency: str, until: date, fine: str) -
         while due <= until:
             items.append(Deadline(
                 f"declaration:{last.year}-{last.month:02d}",
-                f"Turnover declaration: {_period_label(first, last)}",
+                tr("Turnover declaration: {period}", period=_period_label(first, last)),
                 due, DECLARATION, note, period_start=first, period_end=last,
             ))
             first = last + timedelta(days=1)
@@ -130,13 +130,13 @@ def build_deadlines(profile: Profile, figures: Figures, today: date,
     until = today + timedelta(days=horizon_days)
     on = today
     items: list[Deadline] = [
-        Deadline("ereporting", "E-reporting through a plateforme agréée",
+        Deadline("ereporting", tr("E-reporting through a plateforme agréée"),
                  figures.date_value("ereporting_deadline", on), FILING,
-                 "Choose a platform before then. This app does not do e-reporting."),
-        Deadline("vat_mention", "Check the art. 293 B reference on invoices",
+                 tr("Choose a platform before then. This app does not do e-reporting.")),
+        Deadline("vat_mention", tr("Check the art. 293 B reference on invoices"),
                  figures.date_value("vat_mention_tolerated_until", on), HOUSEKEEPING,
-                 "F23208 says this reference is tolerated until this date. Re-read it and "
-                 "update the mention in Settings if needed."),
+                 tr("F23208 says this reference is tolerated until this date. Re-read it and "
+                    "update the mention in Settings if needed.")),
     ]
     start = profile.start_date
     if start is None:
@@ -147,36 +147,36 @@ def build_deadlines(profile: Profile, figures: Figures, today: date,
 
     if profile.declaration_frequency == "quarterly":
         items.append(Deadline(
-            "declaration:option", "Ask URSSAF for quarterly declarations",
+            "declaration:option", tr("Ask URSSAF for quarterly declarations"),
             add_months(start, 1), OPTION,
-            "The option must be taken within the month after the start of activity. To change "
-            "back for a later year, ask before 31 October of the year before.",
+            tr("The option must be taken within the month after the start of activity. To change "
+               "back for a later year, ask before 31 October of the year before."),
         ))
 
     if profile.acre_enabled:
         days = int(figures.value("acre_request_days", start))
         items.append(Deadline(
-            "acre:request", "ACRE request", start + timedelta(days=days), OPTION,
-            "Through the guichet unique, then the ACRE form in URSSAF messaging.",
+            "acre:request", tr("ACRE request"), start + timedelta(days=days), OPTION,
+            tr("Through the guichet unique, then the ACRE form in URSSAF messaging."),
         ))
 
-    vl_note = (
+    vl_note = tr(
         "Optional. Depends on the reference tax income of year N-2; with no French reference "
         "income, ask the SIE."
     )
     items.append(Deadline(
-        "vl:creation", "Versement libératoire option, first year",
+        "vl:creation", tr("Versement libératoire option, first year"),
         end_of_month(add_months(start.replace(day=1), 3)), OPTION, vl_note, optional=True,
     ))
     for year in range(start.year + 1, until.year + 2):
         due = figures.month_day("vl_next_year_md", year - 1)
         if start <= due <= until:
-            items.append(Deadline(f"vl:{year}", f"Versement libératoire option for {year}",
+            items.append(Deadline(f"vl:{year}", tr("Versement libératoire option for {year}", year=year),
                                   due, OPTION, vl_note, optional=True))
 
     items.append(Deadline(
-        "cfe:form", "CFE form 1447-C-SD", figures.month_day("cfe_form_md", start.year), FILING,
-        "Online through impots.gouv.fr, or by post to the SIE. Required even working from home.",
+        "cfe:form", tr("CFE form 1447-C-SD"), figures.month_day("cfe_form_md", start.year), FILING,
+        tr("Online through impots.gouv.fr, or by post to the SIE. Required even working from home."),
     ))
     # Nothing is owed in the first year, so the first payment is the year after.
     for year in range(start.year + 1, until.year + 1):
@@ -184,9 +184,10 @@ def build_deadlines(profile: Profile, figures: Figures, today: date,
         if due <= until:
             threshold = fmt_money(figures.value("cfe_exempt_turnover", on), decimals=0)
             items.append(Deadline(
-                f"cfe:pay:{year}", f"CFE payment {year}", due, TAX,
-                f"Notice in your professional space on impots.gouv.fr. No CFE if {year - 2} "
-                f"turnover was at most {threshold}. First taxable year: 50% off the base.",
+                f"cfe:pay:{year}", tr("CFE payment {year}", year=year), due, TAX,
+                tr("Notice in your professional space on impots.gouv.fr. No CFE if {reference} "
+                   "turnover was at most {threshold}. First taxable year: 50% off the base.",
+                   reference=year - 2, threshold=threshold),
             ))
 
     # Form 2042 C PRO: the date is published each spring, so none is stored.
@@ -194,9 +195,10 @@ def build_deadlines(profile: Profile, figures: Figures, today: date,
         remind = figures.month_day("tax_return_remind_md", year + 1)
         if remind <= until:
             items.append(Deadline(
-                f"2042:{year}", f"Form 2042 C PRO: declare {year} turnover", None, TAX,
-                f"Spring {year + 1}. The date is published each year on impots.gouv.fr; "
-                "enter it here once known. The figure is on the Annual page.",
+                f"2042:{year}", tr("Form 2042 C PRO: declare {year} turnover", year=year), None, TAX,
+                tr("Spring {next_year}. The date is published each year on impots.gouv.fr; "
+                   "enter it here once known. The figure is on the Annual page.",
+                   next_year=year + 1),
                 remind_from=remind,
             ))
 
@@ -204,8 +206,8 @@ def build_deadlines(profile: Profile, figures: Figures, today: date,
         due = figures.month_day("figures_review_md", year)
         if due <= until:
             items.append(Deadline(
-                f"figures:{year}", f"Re-check the figures table for {year}", due, HOUSEKEEPING,
-                "Rates and limits change. Add a row under Settings > Figures for anything new.",
+                f"figures:{year}", tr("Re-check the figures table for {year}", year=year), due, HOUSEKEEPING,
+                tr("Rates and limits change. Add a row under Settings > Figures for anything new."),
             ))
     return sorted(items, key=lambda d: (d.sort_date, d.key))
 
@@ -303,15 +305,17 @@ class DeadlineBook:
                 week = (-days_left - 1) // 7 + 1
                 code = -week
                 if (item["key"], code) not in sent:
-                    pending.append({**item, "_thresholds": [code],
-                                    "_message": f"Overdue: {item['title']} (was due {due})"})
+                    pending.append({**item, "_thresholds": [code], "_message": tr(
+                        "Overdue: {title} (was due {date})", title=item["title"], date=fmt_date(due),
+                    )})
                 continue
             reached = [t for t in thresholds if days_left <= t]
             fresh = [t for t in reached if (item["key"], t) not in sent]
             if fresh:
-                when = "today" if days_left == 0 else f"in {days_left} day(s)"
-                pending.append({**item, "_thresholds": fresh,
-                                "_message": f"{item['title']}: due {when} ({due})"})
+                when = tr("today") if days_left == 0 else tr("in {days} day(s)", days=days_left)
+                pending.append({**item, "_thresholds": fresh, "_message": tr(
+                    "{title}: due {when} ({date})", title=item["title"], when=when, date=fmt_date(due),
+                )})
         return pending
 
     def mark_reminded(self, item: dict[str, Any]) -> None:

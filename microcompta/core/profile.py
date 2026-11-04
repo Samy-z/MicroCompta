@@ -6,6 +6,7 @@ from dataclasses import dataclass, fields
 from datetime import date
 from typing import Any
 
+from ..i18n import DEFAULT_LANGUAGE
 from .db import Database
 from .ledger_policy import TurnoverPolicy
 
@@ -34,6 +35,8 @@ def siren_is_valid(siren: str) -> bool:
 
 @dataclass
 class Profile:
+    language: str = DEFAULT_LANGUAGE
+
     # Identity (printed on invoices)
     legal_name: str = ""
     address: str = ""

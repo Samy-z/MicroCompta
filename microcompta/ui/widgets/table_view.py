@@ -11,14 +11,15 @@ from PySide6.QtWidgets import (
     QTableView, QVBoxLayout, QWidget,
 )
 
-from ..models import Col, RowsModel, SortProxy, fmt_value
+from ...i18n import tr
+from ..models import Col, RowsModel, SortProxy, fmt_value, wrap_tip
 
 
 class DataTable(QWidget):
     row_selected = Signal(object)    # dict or None
     row_activated = Signal(object)   # double-click
 
-    def __init__(self, columns: list[Col], *, title: str = "", key: str = "",
+    def __init__(self, columns: list[Col], *, title: str = "", title_tip: str = "", key: str = "",
                  toolbar: bool = True, parent: QWidget | None = None):
         super().__init__(parent)
         self._columns = columns
@@ -61,35 +62,44 @@ class DataTable(QWidget):
             if title:
                 label = QLabel(title)
                 label.setObjectName("h1")
+                if title_tip:
+                    label.setToolTip(wrap_tip(title_tip))
                 self.bar.addWidget(label)
             self.search = QLineEdit()
-            self.search.setPlaceholderText("Filter rows…")
+            self.search.setPlaceholderText(tr("Filter rows…"))
             self.search.setClearButtonEnabled(True)
+            tip = tr("Type to show only the rows containing this text, in any column.")
+            self.search.setToolTip(wrap_tip(tip))
+            self.search.setAccessibleName(tr("Filter rows"))
+            self.search.setAccessibleDescription(tip)
             self.search.textChanged.connect(self._on_search)
             self.bar.addWidget(self.search, 1)
-            self.count_label = QLabel("0 rows")
+            self.count_label = QLabel(tr("{count} rows", count=0))
             self.count_label.setObjectName("dim")
+            self.count_label.setToolTip(wrap_tip(tr("How many rows the table shows after the filter.")))
             self.bar.addWidget(self.count_label)
             layout.addLayout(self.bar)
         layout.addWidget(self.table, 1)
 
+        self.table.setAccessibleName(title or tr("Table"))
+        self.table.setToolTip(wrap_tip(tr("Click a column title to sort. Ctrl+C copies the selected row.")))
         self.table.selectionModel().selectionChanged.connect(self._on_selection)
-        copy = QAction("Copy", self)
+        copy = QAction(tr("Copy"), self)
         copy.setShortcut(QKeySequence.Copy)
         copy.setShortcutContext(Qt.WidgetWithChildrenShortcut)
         copy.triggered.connect(self.copy_selection)
         self.addAction(copy)
 
     # -- toolbar ------------------------------------------------------------
-    def add_button(self, text: str, slot: Callable[[], Any], *, primary: bool = False,
-                   danger: bool = False, tip: str = "") -> QPushButton:
+    def add_button(self, text: str, slot: Callable[[], Any], *, tip: str, primary: bool = False,
+                   danger: bool = False) -> QPushButton:
         button = QPushButton(text)
         if primary:
             button.setObjectName("primary")
         if danger:
             button.setObjectName("danger")
-        if tip:
-            button.setToolTip(tip)
+        button.setToolTip(wrap_tip(tip))
+        button.setAccessibleDescription(tip)
         button.clicked.connect(lambda _checked=False: slot())
         self.bar.addWidget(button)
         return button
@@ -143,7 +153,7 @@ class DataTable(QWidget):
     def _update_count(self) -> None:
         if self.count_label is not None:
             n = self.proxy.rowCount()
-            self.count_label.setText(f"{n:,} row{'' if n == 1 else 's'}")
+            self.count_label.setText(tr("{count} row", count=n) if n == 1 else tr("{count} rows", count=n))
 
     def _on_selection(self, *_args: Any) -> None:
         self.row_selected.emit(self.current_row())

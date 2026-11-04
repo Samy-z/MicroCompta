@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from ..i18n import fmt_date, tr
+
 
 class MicroComptaError(Exception):
     """Base class: anything here is a message for the user, not a crash."""
@@ -29,9 +31,9 @@ class MissingFigure(MicroComptaError):
     """No effective-dated value covers this date."""
 
     def __init__(self, key: str, on: date):
-        super().__init__(
-            f"No value for '{key}' on {on.isoformat()}. "
-            "Add one under Settings > Figures."
-        )
+        super().__init__(tr(
+            "No value for '{key}' on {date}. Add one under Settings > Figures.",
+            key=key, date=fmt_date(on),
+        ))
         self.key = key
         self.on = on

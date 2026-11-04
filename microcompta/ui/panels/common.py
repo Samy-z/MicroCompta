@@ -7,21 +7,62 @@ from typing import Any, Callable, Iterable
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
-    QCalendarWidget, QComboBox, QDateEdit, QFrame, QHBoxLayout, QLabel, QMessageBox, QScrollArea,
-    QSizePolicy, QVBoxLayout, QWidget,
+    QCalendarWidget, QComboBox, QDateEdit, QDialogButtonBox, QFormLayout, QFrame, QHBoxLayout,
+    QLabel, QLayout,
+    QMessageBox, QScrollArea, QSizePolicy, QToolTip, QVBoxLayout, QWidget,
 )
 
 from ...core.errors import IssueBlocked, MicroComptaError
+from ...i18n import date_input_format, tr
+from ..models import wrap_tip
 from ..theme import FG, FG_DIM, LEVEL_COLOURS
 
 
-class StatCard(QFrame):
+def bubble(widget: QWidget, text: str, name: str = "") -> QWidget:
+    """The info bubble for a widget, and the same words for a screen reader."""
+    widget.setToolTip(wrap_tip(text))
+    widget.setAccessibleDescription(text)
+    if name:
+        widget.setAccessibleName(name)
+    return widget
+
+
+def form_row(form: QFormLayout, label_text: str, field: QWidget | QLayout, tip: str) -> QLabel:
+    """A labelled field whose label and field both carry the bubble."""
+    label = QLabel(label_text)
+    bubble(label, tip)
+    if isinstance(field, QLayout):
+        widgets = [field.itemAt(i).widget() for i in range(field.count())]
+        widgets = [w for w in widgets if w is not None]
+        for widget in widgets:
+            bubble(widget, tip, label_text)
+        if widgets:
+            label.setBuddy(widgets[0])
+    else:
+        bubble(field, tip, label_text)
+        label.setBuddy(field)
+    form.addRow(label, field)
+    return label
+
+
+class _BubbleOnFocus:
+    """Tab onto it and the bubble shows, so a number is reachable without a mouse."""
+
+    def focusInEvent(self, event: Any) -> None:  # noqa: N802
+        super().focusInEvent(event)
+        if self.toolTip():
+            QToolTip.showText(self.mapToGlobal(self.rect().bottomLeft()), self.toolTip(), self)
+
+
+class StatCard(_BubbleOnFocus, QFrame):
     """One headline number with a caption underneath."""
 
-    def __init__(self, label: str, tip: str = "", parent: QWidget | None = None):
+    def __init__(self, label: str, tip: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("card")
         self.setMinimumWidth(112)
+        self.setFocusPolicy(Qt.TabFocus)
+        self._label = label
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 7, 10, 7)
         lay.setSpacing(1)
@@ -31,12 +72,15 @@ class StatCard(QFrame):
         self.caption.setObjectName("metricLabel")
         lay.addWidget(self.value)
         lay.addWidget(self.caption)
-        if tip:
-            self.setToolTip(tip)
+        bubble(self, tip, label)
+
+    def set_tip(self, text: str) -> None:
+        bubble(self, text)
 
     def set_text(self, text: str, colour: str | None = None) -> None:
         self.value.setText(text)
         self.value.setStyleSheet(f"color: {colour or FG};")
+        self.setAccessibleName(f"{self._label}: {text}")
 
 
 class StatRow(QScrollArea):
@@ -47,13 +91,14 @@ class StatRow(QScrollArea):
     """
 
     def __init__(self, specs: Iterable[tuple[str, str, str]], parent: QWidget | None = None):
-        """specs: (key, label, tooltip)"""
+        """specs: (key, label, bubble text)"""
         super().__init__(parent)
         self.setObjectName("statRow")
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFocusPolicy(Qt.NoFocus)
 
         inner = QWidget()
         inner.setObjectName("statRowInner")
@@ -80,10 +125,13 @@ class StatRow(QScrollArea):
 class Chip(QLabel):
     """A small rounded status label."""
 
-    def __init__(self, text: str = "", level: str = "info", parent: QWidget | None = None):
+    def __init__(self, text: str = "", level: str = "info", tip: str = "",
+                 parent: QWidget | None = None):
         super().__init__(text, parent)
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.set_level(level)
+        if tip:
+            bubble(self, tip)
 
     def set_level(self, level: str) -> None:
         colour = LEVEL_COLOURS.get(level, FG_DIM)
@@ -96,7 +144,8 @@ class Chip(QLabel):
 class Banner(QFrame):
     """A full-width message with a coloured edge. Hidden when it has nothing to say."""
 
-    def __init__(self, level: str = "info", text: str = "", parent: QWidget | None = None):
+    def __init__(self, level: str = "info", text: str = "", tip: str = "",
+                 parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("banner")
         lay = QHBoxLayout(self)
@@ -110,6 +159,8 @@ class Banner(QFrame):
         self.label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         lay.addWidget(self.label, 1)
         self.set_level(level)
+        if tip:
+            bubble(self, tip)
         self.setVisible(bool(text))
 
     def set_level(self, level: str) -> None:
@@ -122,16 +173,37 @@ class Banner(QFrame):
         self.setVisible(bool(text))
 
 
-def heading(text: str, object_name: str = "h1") -> QLabel:
+def button_box(standard: Any, accept: Callable[[], Any], reject: Callable[[], Any]) -> QDialogButtonBox:
+    """Standard dialog buttons, with their bubbles."""
+    buttons = QDialogButtonBox(standard)
+    for which, tip in (
+        (QDialogButtonBox.Save, tr("Keeps what you entered.")),
+        (QDialogButtonBox.Ok, tr("Confirms this.")),
+        (QDialogButtonBox.Cancel, tr("Leaves without changing anything.")),
+        (QDialogButtonBox.Close, tr("Closes this window.")),
+    ):
+        button = buttons.button(which)
+        if button is not None:
+            bubble(button, tip)
+    buttons.accepted.connect(accept)
+    buttons.rejected.connect(reject)
+    return buttons
+
+
+def heading(text: str, tip: str = "", object_name: str = "h1") -> QLabel:
     label = QLabel(text)
     label.setObjectName(object_name)
+    if tip:
+        bubble(label, tip)
     return label
 
 
-def dim_label(text: str = "", wrap: bool = True) -> QLabel:
+def dim_label(text: str = "", wrap: bool = True, tip: str = "") -> QLabel:
     label = QLabel(text)
     label.setObjectName("dim")
     label.setWordWrap(wrap)
+    if tip:
+        bubble(label, tip)
     return label
 
 
@@ -156,7 +228,7 @@ def scroll_page(content: QWidget) -> QScrollArea:
 def make_date_edit(value: date | None = None) -> QDateEdit:
     edit = QDateEdit()
     edit.setCalendarPopup(True)
-    edit.setDisplayFormat("yyyy-MM-dd")
+    edit.setDisplayFormat(date_input_format())
     calendar = QCalendarWidget()
     calendar.setGridVisible(False)
     calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
@@ -176,6 +248,7 @@ def from_qdate(value: QDate) -> date:
 def year_combo(years: Iterable[int], current: int) -> QComboBox:
     combo = QComboBox()
     combo.setMinimumWidth(80)
+    bubble(combo, tr("The year these figures are for."), tr("Year"))
     fill_years(combo, years, current)
     return combo
 

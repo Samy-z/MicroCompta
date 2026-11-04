@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import FIGURES_SEED
+from ..i18n import tr
 from . import clock
 from .db import Database
 from .errors import MissingFigure, ValidationError
@@ -74,7 +75,7 @@ class Figures:
             [key],
         )
         if known is None:
-            raise ValidationError(f"Unknown figure '{key}'.")
+            raise ValidationError(tr("Unknown figure '{key}'.", key=key))
         value = self._validated(known["unit"], value)
         self.db.execute(
             "INSERT INTO figures (key, effective_from, value, unit, label, source, note, edited_at) "
@@ -88,17 +89,17 @@ class Figures:
     def _validated(unit: str, value: str) -> str:
         text = str(value).strip()
         if unit in ("eur", "rate", "days"):
-            number = to_decimal(text, "value")
+            number = to_decimal(text, tr("Value"))
             if number < 0:
-                raise ValidationError("A figure cannot be negative.")
+                raise ValidationError(tr("A figure cannot be negative."))
             return format(number, "f")
         if unit == "date":
             try:
                 return date.fromisoformat(text).isoformat()
             except ValueError as exc:
-                raise ValidationError("Use a date in the form YYYY-MM-DD.") from exc
+                raise ValidationError(tr("Use a date in the form YYYY-MM-DD.")) from exc
         if unit == "md":
             if not _MD_RE.match(text):
-                raise ValidationError("Use a month and day in the form MM-DD.")
+                raise ValidationError(tr("Use a month and day in the form MM-DD."))
             return text
-        raise ValidationError(f"Unknown unit '{unit}'.")
+        raise ValidationError(tr("Unknown unit '{unit}'.", unit=unit))

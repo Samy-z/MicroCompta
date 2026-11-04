@@ -11,6 +11,7 @@ from typing import Any, Iterator, Sequence
 import duckdb
 
 from ..config import db_path
+from ..i18n import tr
 from .errors import ImmutableError
 
 SCHEMA_VERSION = 1
@@ -193,9 +194,7 @@ class Database:
     # -- statements ---------------------------------------------------------
     def execute(self, sql: str, params: Sequence[Any] | None = None) -> None:
         if self._GUARD_RE.match(sql):
-            raise ImmutableError(
-                "This record cannot be changed. Corrections are new entries."
-            )
+            raise ImmutableError(tr("This record cannot be changed. Corrections are new entries."))
         with self._lock:
             self.con.execute(sql, list(params) if params is not None else [])
 

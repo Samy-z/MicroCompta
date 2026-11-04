@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+from math import cos, pi, sin
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -28,6 +29,27 @@ from PySide6.QtGui import (  # noqa: E402
 )
 
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+
+
+def gear_svg(colour: str, teeth: int = 8) -> str:
+    """An eight-toothed gear with a hole, as one even-odd path."""
+    outer, root, hole, centre = 11.0, 8.2, 3.4, 12.0
+    # Each tooth is four corners: up the left flank, across the top, down the right flank.
+    tooth_half, flank_half = 0.26 * pi / teeth * 2, 0.40 * pi / teeth * 2
+    points = []
+    for i in range(teeth):
+        angle = 2 * pi * i / teeth
+        for radius, offset in ((root, -flank_half), (outer, -tooth_half),
+                               (outer, tooth_half), (root, flank_half)):
+            points.append((centre + radius * cos(angle + offset), centre + radius * sin(angle + offset)))
+    body = "M" + " L".join(f"{x:.2f} {y:.2f}" for x, y in points) + " Z"
+    circle = (f"M{centre + hole} {centre} A{hole} {hole} 0 1 0 {centre - hole} {centre} "
+              f"A{hole} {hole} 0 1 0 {centre + hole} {centre} Z")
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">\n'
+        f'  <path fill-rule="evenodd" fill="{colour}" stroke="{colour}" stroke-width="0.8" '
+        f'stroke-linejoin="round" d="{body} {circle}"/>\n</svg>\n'
+    )
 
 
 def draw_mark(painter: QPainter, x: float, y: float, side: float) -> None:
@@ -117,6 +139,9 @@ def main() -> int:
     display_path = ASSETS / "MicroCompta_logo_display_dark.png"
     build_icon().save(str(icon_path))
     build_display().save(str(display_path))
+    (ASSETS / "gear.svg").write_text(gear_svg("#8b93a3"), encoding="utf-8", newline="\n")
+    (ASSETS / "gear_hover.svg").write_text(gear_svg("#d7dce5"), encoding="utf-8", newline="\n")
+    print("  gear.svg, gear_hover.svg")
     print(f"  {icon_path.name}")
     print(f"  {display_path.name}")
 

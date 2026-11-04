@@ -15,8 +15,9 @@ run.bat
 ```
 
 The first run builds `.venv`, installs what it needs, and makes shortcuts on the Desktop and
-in the Start Menu. Python 3.11 or later must be installed. At first launch, enter your
-identity and start date under **Settings**, then add your client.
+in the Start Menu. Python 3.11 or later must be installed. At first launch, **Settings** opens
+on its own (later, it's the gear icon at the top right, next to Help). Enter your identity and
+start date, then add your client.
 
 To only build the environment, without opening the app:
 
@@ -120,10 +121,26 @@ app's only write route refuses to touch the ledger and the invoice register. Bot
 chains, and issued PDFs are checksummed, so a change made any other way (a direct SQL session, a
 restored file) raises a red banner at the next check. The check runs at launch and every 6 hours.
 
+**Info bubbles.** Hold the mouse over any number, button or line to see what it means. The same
+words are given to screen readers, and Tab onto a number card to show its bubble from the
+keyboard. A test fails if a button, field, number or column has no bubble.
+
 **Figures.** Every limit, rate and fixed date is in effective-dated, editable data under
 **Settings > Figures**, with its source. To change one over time, add a row with a later date.
 Seed values are in `microcompta/data/figures_seed.json` and never overwrite an edit. Sources were
 last checked on 2026-11-04, and a yearly reminder asks you to re-check them.
+
+## Language
+
+The app starts in French. English is an option under Settings > Language, and applies straight
+away. Invoices, credit notes and the livre des recettes stay in French either way, because they
+are French legal records. Stored values are language-neutral, so switching can't change a record.
+
+English is the source language: the text in the code is the key. To add a language, copy
+`microcompta/data/i18n/fr.json` to `<code>.json`, change `language_name`, and translate the
+values. It then appears in Settings with no code change. Tests check that the French catalogue
+covers every string in the code, with matching `{placeholders}`, and that the French screens
+show no English. Number and date formats are in `microcompta/i18n.py`.
 
 ## Still open
 

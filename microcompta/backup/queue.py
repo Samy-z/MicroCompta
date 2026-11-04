@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import Any, Callable
 
 from ..core import clock
+from ..i18n import tr
 from ..core.db import Database
 from ..core.documents import file_hashes
 from .drive_client import (
@@ -136,7 +137,7 @@ class UploadQueue:
                 report.failed += 1
                 report.newly_failed.append(doc["title"])
             except OSError as exc:
-                self._fail(document_id, f"Could not read the local file: {exc}")
+                self._fail(document_id, tr("Could not read the local file: {error}", error=exc))
                 report.failed += 1
                 report.newly_failed.append(doc["title"])
             else:
@@ -146,11 +147,11 @@ class UploadQueue:
     def _upload_one(self, client: DriveClient, doc: dict[str, Any]) -> None:
         path = self.documents.path_of(doc)
         if not path.is_file():
-            raise PermanentDriveError(f"The local file is missing: {doc['rel_path']}")
+            raise PermanentDriveError(tr("The local file is missing: {path}", path=doc["rel_path"]))
         sha256, md5, size = file_hashes(path)
         if sha256 != doc["sha256"]:
             raise PermanentDriveError(
-                "The local file no longer matches what was recorded, so it was not uploaded."
+                tr("The local file no longer matches what was recorded, so it was not uploaded.")
             )
 
         queued = self.db.row(
@@ -184,7 +185,7 @@ class UploadQueue:
         """Ask Drive again rather than trusting the reply to the upload."""
         checked = client.metadata(remote.id)
         if checked.md5 is None:
-            raise TransientDriveError("Drive hasn't reported a checksum yet.")
+            raise TransientDriveError(tr("Drive hasn't reported a checksum yet."))
         if checked.md5 != md5 or (checked.sha256 and checked.sha256 != sha256) or (
             checked.size is not None and checked.size != size
         ):
@@ -193,10 +194,11 @@ class UploadQueue:
             self.db.execute(
                 "UPDATE upload_queue SET drive_file_id = NULL WHERE document_id = ?", [doc["id"]]
             )
-            raise PermanentDriveError(
-                f"Checksum mismatch: Drive holds {checked.md5}, expected {md5}. "
-                "The wrong copy stays in Drive and the upload will be tried again."
-            )
+            raise PermanentDriveError(tr(
+                "Checksum mismatch: Drive holds {found}, expected {expected}. "
+                "The wrong copy stays in Drive and the upload will be tried again.",
+                found=checked.md5, expected=md5,
+            ))
         self.db.execute(
             "UPDATE upload_queue SET status = ?, drive_file_id = ?, drive_md5 = ?, uploaded_at = ?, "
             "last_error = NULL WHERE document_id = ?",

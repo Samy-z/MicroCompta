@@ -11,20 +11,21 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Mapping
 
+from ..i18n import N_
 from .money import round_money
 
-UNCONFIRMED = "unconfirmed, URSSAF to answer"
+UNCONFIRMED = N_("unconfirmed, URSSAF to answer")
 
 BASIS_LABELS = {
-    "gross": "Gross, before provider fees",
-    "net_of_fees": "Net of provider fees",
+    "gross": N_("Gross, before provider fees"),
+    "net_of_fees": N_("Net of provider fees"),
 }
 FX_LABELS = {
-    "entry_rate": "Rate recorded on each entry (ECB reference by default)",
-    "provider_effective": "Rate the provider actually applied, derived from net credited",
+    "entry_rate": N_("Rate recorded on each entry (ECB reference by default)"),
+    "provider_effective": N_("Rate the provider actually applied, derived from net credited"),
 }
 # The official text is about commissions and fees in general, not Stripe or PayPal.
-FEE_POINTER = (
+FEE_POINTER = N_(
     "Service-public F23257 says no commission or fee is deducted from turnover "
     "(« aucune charge ne doit être déduite du chiffre d'affaires (commissions, frais etc.) »), "
     "which is why gross is the default."
@@ -35,9 +36,6 @@ FEE_POINTER = (
 class TurnoverPolicy:
     basis: str = "gross"
     fx: str = "entry_rate"
-
-    def describe(self) -> str:
-        return f"{BASIS_LABELS.get(self.basis, self.basis)} · {FX_LABELS.get(self.fx, self.fx)}"
 
 
 def effective_eur(entry: Mapping[str, Any], policy: TurnoverPolicy) -> tuple[Decimal, Decimal]:

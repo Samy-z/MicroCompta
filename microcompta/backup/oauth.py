@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import requests
 
+from ..i18n import tr
 from .drive_client import AuthRequired, TransientDriveError
 
 log = logging.getLogger(__name__)
@@ -54,17 +55,17 @@ def load_client_file(path: Path) -> OAuthClient:
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise OAuthError("That file could not be read as JSON.") from exc
+        raise OAuthError(tr("That file could not be read as JSON.")) from exc
     if not isinstance(raw, dict):
-        raise OAuthError("That is not an OAuth client file.")
+        raise OAuthError(tr("That is not an OAuth client file."))
     if "installed" not in raw:
         kind = next(iter(raw), "unknown")
         raise OAuthError(
-            f"That client is of type '{kind}'. Create one of type 'Desktop app' instead."
+            tr("That client is of type '{kind}'. Create one of type 'Desktop app' instead.", kind=kind)
         )
     block = raw["installed"]
     if not block.get("client_id"):
-        raise OAuthError("That file has no client_id.")
+        raise OAuthError(tr("That file has no client_id."))
     return OAuthClient(block["client_id"], block.get("client_secret", ""))
 
 
@@ -120,9 +121,9 @@ class _Handler(BaseHTTPRequestHandler):
             self.server.result = {"error": query.get("error", ["unknown"])[0]}
         succeeded = ok and "code" in query
         page = _DONE_PAGE.format(
-            title="Signed in" if succeeded else "Sign-in did not complete",
-            body="You can close this tab and go back to MicroCompta."
-            if succeeded else "Go back to MicroCompta and try again.",
+            title=tr("Signed in") if succeeded else tr("Sign-in did not complete"),
+            body=tr("You can close this tab and go back to MicroCompta.")
+            if succeeded else tr("Go back to MicroCompta and try again."),
         )
         body = page.encode("utf-8")
         self.send_response(200)
@@ -156,9 +157,9 @@ def run_sign_in(
         deadline = time.monotonic() + timeout
         while server.result is None:
             if cancelled():
-                raise OAuthError("Sign-in cancelled.")
+                raise OAuthError(tr("Sign-in cancelled."))
             if time.monotonic() > deadline:
-                raise OAuthError("Sign-in timed out. Start it again when you're ready.")
+                raise OAuthError(tr("Sign-in timed out. Start it again when you're ready."))
             server.handle_request()
     finally:
         server.server_close()
@@ -166,10 +167,10 @@ def run_sign_in(
     result = server.result
     if "code" not in result:
         if result["error"] == "state_mismatch":
-            raise OAuthError("The browser's reply didn't match this sign-in, so it was refused.")
+            raise OAuthError(tr("The browser's reply didn't match this sign-in, so it was refused."))
         if result["error"] == "access_denied":
-            raise OAuthError("Access was declined in the browser.")
-        raise OAuthError(f"Google reported: {result['error']}.")
+            raise OAuthError(tr("Access was declined in the browser."))
+        raise OAuthError(tr("Google reported: {error}.", error=result["error"]))
 
     payload = {
         "code": result["code"],
@@ -183,19 +184,19 @@ def run_sign_in(
     try:
         response = http.post(TOKEN_URL, data=payload, timeout=30)
     except requests.RequestException as exc:
-        raise OAuthError(f"No connection to Google ({type(exc).__name__}).") from None
+        raise OAuthError(tr("No connection to Google ({error}).", error=type(exc).__name__)) from None
     if response.status_code != 200:
-        raise OAuthError(f"Google refused the sign-in (HTTP {response.status_code}).")
+        raise OAuthError(tr("Google refused the sign-in (HTTP {status}).", status=response.status_code))
 
     token = response.json()
     if SCOPE not in token.get("scope", "").split():
-        raise OAuthError(
+        raise OAuthError(tr(
             "Google Drive access wasn't granted. Sign in again and tick the Drive box on "
             "the consent screen."
-        )
+        ))
     if not token.get("refresh_token"):
-        raise OAuthError("Google returned no refresh token. Remove the app's access in your "
-                         "Google account, then sign in again.")
+        raise OAuthError(tr("Google returned no refresh token. Remove the app's access in your "
+                            "Google account, then sign in again."))
     _store_token(token_file, token)
     log.info("Google Drive sign-in completed.")
 
@@ -238,7 +239,7 @@ class TokenManager:
         try:
             return json.loads(self.token_file.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
-            raise AuthRequired("Not signed in to Google Drive.") from exc
+            raise AuthRequired(tr("Not signed in to Google Drive.")) from exc
 
     def drop_access_token(self) -> None:
         token = self._load()
@@ -256,7 +257,7 @@ class TokenManager:
         refresh_token = token.get("refresh_token")
         if not refresh_token:
             self.sign_out()
-            raise AuthRequired("Not signed in to Google Drive.")
+            raise AuthRequired(tr("Not signed in to Google Drive."))
         try:
             client = load_client_file(self.client_file)
         except OAuthError as exc:
@@ -272,11 +273,11 @@ class TokenManager:
             response = self.http.post(TOKEN_URL, data=payload, timeout=30)
         except requests.RequestException as exc:
             raise TransientDriveError(
-                f"No connection to Google ({type(exc).__name__})."
+                tr("No connection to Google ({error}).", error=type(exc).__name__)
             ) from None
 
         if response.status_code >= 500 or response.status_code == 429:
-            raise TransientDriveError(f"Google sign-in service: HTTP {response.status_code}.")
+            raise TransientDriveError(tr("Google sign-in service: HTTP {status}.", status=response.status_code))
         if response.status_code != 200:
             try:
                 error = response.json().get("error", "")
@@ -284,11 +285,11 @@ class TokenManager:
                 error = ""
             if error == "invalid_grant":
                 self.sign_out()
-                raise AuthRequired(
+                raise AuthRequired(tr(
                     "Google sign-in expired or was revoked. Reconnect Google Drive. If this "
                     "happens every 7 days, the OAuth app is still in Testing: publish it."
-                )
-            raise AuthRequired(f"Google refused the sign-in ({error or response.status_code}).")
+                ))
+            raise AuthRequired(tr("Google refused the sign-in ({error}).", error=error or response.status_code))
 
         fresh = response.json()
         merged = {**token, **fresh, "refresh_token": fresh.get("refresh_token", refresh_token)}

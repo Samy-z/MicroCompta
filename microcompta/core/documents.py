@@ -14,6 +14,7 @@ import stat
 from pathlib import Path
 from typing import Any, Callable
 
+from ..i18n import tr
 from . import clock
 from .db import Database
 from .errors import ValidationError
@@ -96,10 +97,10 @@ class Documents:
     ) -> int:
         """Store a file under documents/<year>/<kind>/ and queue its upload."""
         if kind not in KIND_DIRS:
-            raise ValidationError(f"Unknown document kind '{kind}'.")
+            raise ValidationError(tr("Unknown document kind '{kind}'.", kind=kind))
         source = Path(source)
         if not source.is_file():
-            raise ValidationError(f"File not found: {source}")
+            raise ValidationError(tr("File not found: {path}", path=source))
         dest = self._destination(kind, year, name or source.name)
         if move:
             os.replace(source, dest)
@@ -143,7 +144,7 @@ class Documents:
         for doc in self.db.rows("SELECT * FROM documents ORDER BY id"):
             path = self.path_of(doc)
             if not path.is_file():
-                problems.append(f"Document missing from disk: {doc['rel_path']}")
+                problems.append(tr("Document missing from disk: {path}", path=doc["rel_path"]))
             elif file_hashes(path)[0] != doc["sha256"]:
-                problems.append(f"Document changed on disk: {doc['rel_path']}")
+                problems.append(tr("Document changed on disk: {path}", path=doc["rel_path"]))
         return problems

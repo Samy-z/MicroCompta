@@ -8,6 +8,8 @@ from PySide6.QtCore import QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWidget
 
+from ...i18n import tr
+from ..models import wrap_tip
 from ..theme import ACCENT, BG_ALT, BG_RAISED, BORDER, FG, FG_DIM
 
 STRIP_WIDTH = 30
@@ -28,7 +30,8 @@ class CollapsedStrip(QWidget):
         self.setFixedWidth(STRIP_WIDTH)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("Show the panel")
+        self.setToolTip(wrap_tip(tr("Show the form for recording a payment (Ctrl+B).")))
+        self.setAccessibleName(text)
         self.setAttribute(Qt.WA_Hover, True)
 
     def sizeHint(self) -> QSize:  # noqa: N802
@@ -84,7 +87,7 @@ class DockTitleBar(QWidget):
 
     collapse_requested = Signal()
 
-    def __init__(self, title: str, parent: QWidget | None = None):
+    def __init__(self, title: str, tip: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("dockTitle")
         layout = QHBoxLayout(self)
@@ -93,12 +96,14 @@ class DockTitleBar(QWidget):
 
         label = QLabel(title)
         label.setObjectName("dockTitleText")
+        label.setToolTip(wrap_tip(tip))
         layout.addWidget(label)
         layout.addStretch(1)
 
         button = QPushButton("‹‹")
         button.setObjectName("dockCollapse")
-        button.setToolTip("Collapse this panel  (Ctrl+B)")
+        button.setToolTip(wrap_tip(tr("Collapse this panel to give the tables more room (Ctrl+B).")))
+        button.setAccessibleName(tr("Collapse this panel"))
         button.setCursor(Qt.PointingHandCursor)
         button.setFixedSize(26, 20)
         button.clicked.connect(self.collapse_requested.emit)

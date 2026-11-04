@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
+from ..i18n import fmt_date, fmt_number, fmt_percent, month_name, tr
 from . import clock
 from .clients import EXCLUSION_LABEL
 from .figures import Figures
@@ -151,9 +152,6 @@ class LimitsReport:
     acre_until: date | None
 
 
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-
-
 class Limits:
     def __init__(self, ledger: Ledger, figures: Figures, profile_loader: Any):
         self.ledger = ledger
@@ -210,40 +208,44 @@ class Limits:
         details: list[str] = []
         if start and start.year == year and limit != full:
             basis = self.figures.value("proration_days_basis", on)
-            details.append(
-                f"First year, prorated: {fmt_money(full, decimals=0)} × "
-                f"{days_active(start, year)} / {basis} = {fmt_money(limit, decimals=0)}."
-            )
+            details.append(tr(
+                "First year, prorated: {full} × {days} / {basis} = {limit}.",
+                full=fmt_money(full, decimals=0), days=days_active(start, year), basis=basis,
+                limit=fmt_money(limit, decimals=0),
+            ))
         if over_prev and over_prev2:
-            level, headline = "over", (
-                f"Over in {year - 2} and {year - 1}: the micro regime ended on 1 January {year}."
+            level, headline = "over", tr(
+                "Over in {first} and {second}: the micro regime ended on 1 January {year}.",
+                first=year - 2, second=year - 1, year=year,
             )
         elif over_now and over_prev:
-            level, headline = "over", (
-                f"Over two years running: you leave the micro regime on 1 January {year + 1}."
+            level, headline = "over", tr(
+                "Over two years running: you leave the micro regime on 1 January {year}.",
+                year=year + 1,
             )
         elif over_now:
-            level, headline = "warn", (
+            level, headline = "warn", tr(
                 "Over the ceiling this year. One year over is allowed; "
-                f"a second in {year + 1} ends the regime on 1 January {year + 2}."
+                "a second in {second} ends the regime on 1 January {year}.",
+                second=year + 1, year=year + 2,
             )
         elif over_prev and projection > limit:
-            level, headline = "warn", (
-                f"Over last year and on course to be over again: that ends the regime on "
-                f"1 January {year + 1}."
+            level, headline = "warn", tr(
+                "Over last year and on course to be over again: that ends the regime on "
+                "1 January {year}.", year=year + 1,
             )
         elif projection > limit:
-            level, headline = "warn", "On course to pass the ceiling by year-end at this pace."
+            level, headline = "warn", tr("On course to pass the ceiling by year-end at this pace.")
         elif limit and ytd >= limit * near:
-            level, headline = "near", f"Above {near * 100:.0f}% of the ceiling."
+            level, headline = "near", tr("Above {pct} of the ceiling.", pct=fmt_percent(near, 0))
         else:
-            level, headline = "ok", "Within the ceiling."
+            level, headline = "ok", tr("Within the ceiling.")
         if (over_now or over_prev) and start and year - 1 <= start.year <= year:
-            details.append(
+            details.append(tr(
                 "Whether a prorated first year counts as a year over isn't stated in the "
                 "official sources read."
-            )
-        return LimitCard("ceiling", "Micro ceiling", ytd, limit, level, headline, details,
+            ))
+        return LimitCard("ceiling", tr("Micro ceiling"), ytd, limit, level, headline, details,
                          projection=projection if as_of.year == year else None)
 
     def _vat_limits(self, year: int, start: date | None) -> tuple[Decimal, Decimal]:
@@ -272,14 +274,16 @@ class Limits:
 
         details: list[str] = []
         if start and start.year == year:
-            details.append(
-                f"Creation year: limits adjusted by {days_active(start, year)} days of activity."
-            )
+            details.append(tr(
+                "Creation year: limits adjusted by {days} days of activity.",
+                days=days_active(start, year),
+            ))
         if excluded:
-            details.append(
-                f"{fmt_money(excluded)} of turnover excluded: clients marked as not taxed in "
-                f"France. A non-EU business client is excluded, {EXCLUSION_LABEL}."
-            )
+            details.append(tr(
+                "{amount} of turnover excluded: clients marked as not taxed in France. "
+                "A non-EU business client is excluded, {label}.",
+                amount=fmt_money(excluded), label=tr(EXCLUSION_LABEL),
+            ))
 
         # Only look up last year's limit if there was turnover to test against it, so a
         # first year on record never needs a figure from before it.
@@ -288,72 +292,75 @@ class Limits:
 
         crossing = self._crossing_date(year, upper, policy) if counted > upper else None
         if crossing:
-            level, headline = "over", (
-                f"Above the upper limit: VAT applies from {crossing.isoformat()}, the day it was "
-                "crossed. Tell the SIE and stop using the art. 293 B mention."
+            level, headline = "over", tr(
+                "Above the upper limit: VAT applies from {date}, the day it was crossed. "
+                "Tell the SIE and stop using the art. 293 B mention.",
+                date=fmt_date(crossing),
             )
         elif ended_prior:
-            level, headline = "over", (
-                f"Above the base limit in {year - 1}: the franchise ended on 1 January {year}."
+            level, headline = "over", tr(
+                "Above the base limit in {previous}: the franchise ended on 1 January {year}.",
+                previous=year - 1, year=year,
             )
         elif counted > base:
-            level, headline = "warn", (
-                f"Above the base limit: the franchise ends on 1 January {year + 1}."
+            level, headline = "warn", tr(
+                "Above the base limit: the franchise ends on 1 January {year}.", year=year + 1,
             )
         else:
             near = self.figures.value("near_limit_ratio", date(year, 1, 1))
             if base and counted >= base * near:
-                level, headline = "near", f"Above {near * 100:.0f}% of the base limit."
+                level, headline = "near", tr("Above {pct} of the base limit.", pct=fmt_percent(near, 0))
             else:
-                level, headline = "ok", "Within the franchise."
-        return LimitCard("vat", "VAT franchise (turnover taxed in France)", counted, upper, level,
-                         headline, details, ticks=[(base, "base")])
+                level, headline = "ok", tr("Within the franchise.")
+        return LimitCard("vat", tr("VAT franchise (turnover taxed in France)"), counted, upper, level,
+                         headline, details, ticks=[(base, tr("base"))])
 
     def _bank_card(self, year: int, ytd: Decimal, profile: Profile) -> LimitCard:
         limit = self.figures.value("bank_account_threshold", date(year, 1, 1))
         prev = self.turnover(year - 1, profile.policy)
+        amount = fmt_money(limit, decimals=0)
         if ytd > limit and prev > limit:
-            level, headline = "over", (
-                f"Above {fmt_money(limit, decimals=0)} two years running: a separate bank "
-                "account is mandatory."
+            level, headline = "over", tr(
+                "Above {amount} two years running: a separate bank account is mandatory.", amount=amount,
             )
         elif ytd > limit:
-            level, headline = "near", (
-                f"Above {fmt_money(limit, decimals=0)} this year. A second year above makes a "
-                "separate bank account mandatory."
+            level, headline = "near", tr(
+                "Above {amount} this year. A second year above makes a separate bank account "
+                "mandatory.", amount=amount,
             )
         else:
-            level, headline = "ok", "No separate account required yet."
-        details = [f"{year - 1} turnover: {fmt_money(prev)}."]
-        return LimitCard("bank", "Separate bank account", ytd, limit, level, headline, details)
+            level, headline = "ok", tr("No separate account required yet.")
+        details = [tr("{year} turnover: {amount}.", year=year - 1, amount=fmt_money(prev))]
+        return LimitCard("bank", tr("Separate bank account"), ytd, limit, level, headline, details)
 
     def _cfe_card(self, year: int, profile: Profile) -> LimitCard:
         limit = self.figures.value("cfe_exempt_turnover", date(year, 1, 1))
+        amount = fmt_money(limit, decimals=0)
         start = profile.start_date
         if start and year == start.year:
             return LimitCard("cfe", "CFE", ZERO, limit, "info",
-                             "Nothing is owed in the first year of activity.",
-                             ["The CFE form is still due: see Deadlines."], has_bar=False)
+                             tr("Nothing is owed in the first year of activity."),
+                             [tr("The CFE form is still due: see Deadlines.")], has_bar=False)
         reference = self.turnover(year - 2, profile.policy)
         if start and year - 2 < start.year:
             return LimitCard(
                 "cfe", "CFE", ZERO, limit, "info",
-                f"No {year - 2} turnover to compare with {fmt_money(limit, decimals=0)}.",
-                ["First taxable year: 50% off the base. A first-year turnover may be prorated "
-                 "to 12 months for this test."],
+                tr("No {year} turnover to compare with {amount}.", year=year - 2, amount=amount),
+                [tr("First taxable year: 50% off the base. A first-year turnover may be prorated "
+                    "to 12 months for this test.")],
                 has_bar=False,
             )
         if reference <= limit:
-            level, headline = "ok", (
-                f"{year - 2} turnover at or below {fmt_money(limit, decimals=0)}: no CFE owed "
-                f"for {year}."
+            level, headline = "ok", tr(
+                "{reference} turnover at or below {amount}: no CFE owed for {year}.",
+                reference=year - 2, amount=amount, year=year,
             )
         else:
-            level, headline = "info", (
-                f"{year - 2} turnover above {fmt_money(limit, decimals=0)}: CFE is owed for "
-                f"{year}. The amount is on your notice."
+            level, headline = "info", tr(
+                "{reference} turnover above {amount}: CFE is owed for {year}. The amount is on "
+                "your notice.", reference=year - 2, amount=amount, year=year,
             )
-        return LimitCard("cfe", f"CFE ({year - 2} turnover)", reference, limit, level, headline)
+        return LimitCard("cfe", tr("CFE ({year} turnover)", year=year - 2), reference, limit, level, headline)
 
     # -- periods ------------------------------------------------------------
     def periods(self, year: int, profile: Profile, by: str | None = None) -> list[PeriodRow]:
@@ -363,12 +370,12 @@ class Limits:
             for q in range(4):
                 first = date(year, q * 3 + 1, 1)
                 last = (date(year + 1, 1, 1) if q == 3 else date(year, q * 3 + 4, 1)) - timedelta(days=1)
-                spans.append((f"Q{q + 1} {year}", first, last))
+                spans.append((tr("Q{quarter} {year}", quarter=q + 1, year=year), first, last))
         else:
             for m in range(1, 13):
                 first = date(year, m, 1)
                 last = (date(year + 1, 1, 1) if m == 12 else date(year, m + 1, 1)) - timedelta(days=1)
-                spans.append((f"{MONTHS[m - 1]} {year}", first, last))
+                spans.append((f"{month_name(m)} {year}", first, last))
         entries = self.ledger.entries(year)
         rows = []
         for label, first, last in spans:
@@ -382,7 +389,7 @@ class Limits:
                 turnover += amount
                 set_aside += round_money(amount * info.rate)
                 rates[info.label] = info.rate
-            rate_text = " / ".join(f"{r * 100:.1f}%" for r in rates.values())
+            rate_text = " / ".join(fmt_percent(r) for r in rates.values())
             rows.append(PeriodRow(label, first, last, turnover, rate_text, set_aside, len(in_span)))
         return rows
 
@@ -448,3 +455,6 @@ class Limits:
             "expert_suggested": max(report.projection, turnover) >= trigger,
             "quarters": self.ledger.quarter_totals(year, profile.policy),
         }
+
+
+__all__ = ["Limits", "fmt_number"]

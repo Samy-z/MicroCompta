@@ -17,7 +17,8 @@ from ...core.errors import MissingFigure, ValidationError
 from ...core.ledger import PAYMENT_METHODS, RATE_SOURCES
 from ...core.ledger_policy import UNCONFIRMED
 from ...core.money import fmt_money, round_money, to_decimal
-from .common import dim_label, from_qdate, guarded, make_date_edit, to_qdate
+from ...i18n import fmt_number, fmt_percent, fmt_rate, tr
+from .common import bubble, dim_label, form_row, from_qdate, guarded, make_date_edit, to_qdate
 
 
 class PaymentForm(QScrollArea):
@@ -36,48 +37,69 @@ class PaymentForm(QScrollArea):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        payment = QGroupBox("Payment")
+        payment = QGroupBox(tr("Payment"))
+        bubble(payment, tr("What was received, from whom, and how."))
         form = QFormLayout(payment)
         form.setSpacing(6)
         self.date = make_date_edit(clock.today())
-        self.date.setToolTip("Turnover counts on the date received, not the invoice date.")
-        form.addRow("Received on", self.date)
+        form_row(form, tr("Received on"), self.date, tr(
+            "The day the money arrived. Turnover counts on this date, not the invoice date."
+        ))
         self.client = QComboBox()
         self.client.currentIndexChanged.connect(self._on_client)
-        form.addRow("Client", self.client)
+        form_row(form, tr("Client"), self.client, tr(
+            "Who paid. The ledger keeps a copy of the name. Clients are added in Settings: "
+            "the gear icon at the top right."
+        ))
         self.description = QLineEdit()
-        self.description.setPlaceholderText("Annotation work, week 12")
-        form.addRow("Description", self.description)
+        self.description.setPlaceholderText(tr("Annotation work, week 12"))
+        form_row(form, tr("Description"), self.description, tr(
+            "What the payment is for. The livre des recettes must state the origin of each receipt."
+        ))
         self.method = QComboBox()
-        self.method.addItems(PAYMENT_METHODS)
-        form.addRow("Method", self.method)
+        for method in PAYMENT_METHODS:
+            self.method.addItem(tr(method), method)
+        form_row(form, tr("Method"), self.method, tr(
+            "How the money arrived. The livre des recettes must state it."
+        ))
         self.reference = QLineEdit()
-        self.reference.setPlaceholderText("Provider's reference")
-        form.addRow("Reference", self.reference)
+        self.reference.setPlaceholderText(tr("Provider's reference"))
+        form_row(form, tr("Reference"), self.reference, tr(
+            "The provider's own reference for this payment. The same reference can't be recorded "
+            "twice for a client, which catches duplicates."
+        ))
         layout.addWidget(payment)
 
-        amounts = QGroupBox("Amounts")
+        amounts = QGroupBox(tr("Amounts"))
+        bubble(amounts, tr("Each value is stored separately, so nothing is lost if a rule changes."))
         grid = QFormLayout(amounts)
         grid.setSpacing(6)
         self.gross = QLineEdit()
-        self.gross.setPlaceholderText("0.00")
         self.gross.textChanged.connect(self._update_preview)
-        grid.addRow("Gross", self.gross)
+        form_row(grid, tr("Gross"), self.gross, tr(
+            "The full amount the client paid, before any fee, in the client's currency."
+        ))
         self.rate = QLineEdit()
-        self.rate.setPlaceholderText("1.0823")
-        self.rate.setToolTip("Units of the currency for 1 EUR, as the ECB publishes it.")
+        self.rate.setPlaceholderText(fmt_rate(Decimal("1.0823")))
         self.rate.textChanged.connect(self._update_preview)
-        grid.addRow("Rate per 1 EUR", self.rate)
+        form_row(grid, tr("Rate per 1 EUR"), self.rate, tr(
+            "Units of the currency for 1 EUR, as the ECB publishes it. Which rate applies to "
+            "turnover: {label}.", label=tr(UNCONFIRMED),
+        ))
         self.rate_source = QComboBox()
-        self.rate_source.addItems(RATE_SOURCES)
-        grid.addRow("Rate source", self.rate_source)
+        for source in RATE_SOURCES:
+            self.rate_source.addItem(tr(source), source)
+        form_row(grid, tr("Rate source"), self.rate_source, tr(
+            "Where this rate comes from. Kept with the entry so the choice can be reviewed later."
+        ))
         self.eur_gross = QLineEdit()
         self.eur_gross.setReadOnly(True)
-        grid.addRow("EUR gross", self.eur_gross)
+        form_row(grid, tr("EUR gross"), self.eur_gross, tr(
+            "Gross divided by the rate. Calculated for you and stored with the entry."
+        ))
 
         fee_row = QHBoxLayout()
         self.fee = QLineEdit("0")
-        self.fee.setToolTip("The provider's fee, stored separately from gross and net.")
         self.fee.textChanged.connect(self._update_preview)
         self.fee_currency = QComboBox()
         self.fee_currency.addItems(["USD", "EUR"])
@@ -85,43 +107,57 @@ class PaymentForm(QScrollArea):
         self.fee_currency.currentIndexChanged.connect(self._update_preview)
         fee_row.addWidget(self.fee, 1)
         fee_row.addWidget(self.fee_currency)
-        grid.addRow("Provider fee", fee_row)
+        form_row(grid, tr("Provider fee"), fee_row, tr(
+            "What Stripe or PayPal kept, and in which currency. Stored separately: by default it "
+            "isn't deducted from turnover."
+        ))
 
         net_row = QHBoxLayout()
         self.net = QLineEdit()
-        self.net.setPlaceholderText("0.00")
         self.net_currency = QComboBox()
         self.net_currency.addItems(["EUR", "USD"])
         self.net_currency.setMaximumWidth(70)
         net_row.addWidget(self.net, 1)
         net_row.addWidget(self.net_currency)
-        grid.addRow("Net credited", net_row)
+        form_row(grid, tr("Net credited"), net_row, tr(
+            "What actually reached your account, and in which currency."
+        ))
         self.set_aside = QLineEdit()
         self.set_aside.setReadOnly(True)
-        self.set_aside.setToolTip("Contributions on this payment at the rate in force on its date.")
-        grid.addRow("To set aside", self.set_aside)
+        form_row(grid, tr("To set aside"), self.set_aside, tr(
+            "Contributions on this payment, at the rate in force on its date. Keep this money "
+            "aside for your next declaration."
+        ))
         layout.addWidget(amounts)
 
         self.unconfirmed = dim_label(
-            f"USD rate and fees in turnover: {UNCONFIRMED}. Each value is kept separately, so "
-            "the setting can change later without touching an entry."
+            tr("USD rate and fees in turnover: {label}. Each value is kept separately, so the "
+               "setting can change later without touching an entry.", label=tr(UNCONFIRMED)),
+            tip=tr("The official sources read so far don't settle this. The choice is under Settings: "
+                   "the gear icon at the top right."),
         )
         layout.addWidget(self.unconfirmed)
 
         receipt_row = QHBoxLayout()
-        self.receipt_button = QPushButton("Attach receipt…")
+        self.receipt_button = QPushButton(tr("Attach receipt…"))
+        bubble(self.receipt_button, tr(
+            "Optional. Keeps a copy of a file with this entry and queues it for Google Drive."
+        ))
         self.receipt_button.clicked.connect(self._choose_receipt)
         receipt_row.addWidget(self.receipt_button)
-        self.receipt_label = dim_label("", wrap=False)
+        self.receipt_label = dim_label("", wrap=False, tip=tr("The file that will be attached."))
         receipt_row.addWidget(self.receipt_label, 1)
         layout.addLayout(receipt_row)
 
-        self.record_button = QPushButton("Record payment")
+        self.record_button = QPushButton(tr("Record payment"))
         self.record_button.setObjectName("primary")
         self.record_button.clicked.connect(lambda _checked=False: self.record())
         layout.addWidget(self.record_button)
-        layout.addWidget(dim_label("Entries can't be edited once recorded. "
-                                   "A correction is a reversing entry with a reason."))
+        layout.addWidget(dim_label(
+            tr("Entries can't be edited once recorded. A correction is a reversing entry with a reason."),
+            tip=tr("The livre des recettes is a record. To correct an entry, use Reverse entry on "
+                   "the Payments tab, then record the right one."),
+        ))
         layout.addStretch(1)
         self.setWidget(inner)
         self.reload()
@@ -140,7 +176,11 @@ class PaymentForm(QScrollArea):
         self.client.blockSignals(False)
         has_client = self.client.count() > 0
         self.record_button.setEnabled(has_client)
-        self.record_button.setToolTip("" if has_client else "Add a client under Settings > Clients.")
+        bubble(self.record_button, tr(
+            "Adds this payment to the ledger. It can't be edited afterwards, only reversed."
+        ) if has_client else tr(
+            "Add a client first, in Settings: the gear icon at the top right."
+        ))
         self.date.setMaximumDate(to_qdate(clock.today()))
         self._on_client()
 
@@ -151,7 +191,7 @@ class PaymentForm(QScrollArea):
 
     def _on_client(self, *_args: Any) -> None:
         currency = self._currency()
-        self.gross.setPlaceholderText(f"0.00 {currency}")
+        self.gross.setPlaceholderText(f"{fmt_number(0)} {currency}")
         if currency == "EUR":
             self.rate.setText("1")
         self.rate.setEnabled(currency != "EUR")
@@ -159,6 +199,7 @@ class PaymentForm(QScrollArea):
         self._update_preview()
 
     def _update_preview(self, *_args: Any) -> None:
+        self.net.setPlaceholderText(fmt_number(0))
         try:
             gross = to_decimal(self.gross.text())
             rate = to_decimal(self.rate.text() or "0")
@@ -175,7 +216,7 @@ class PaymentForm(QScrollArea):
             fee_eur = fee if self.fee_currency.currentText() == "EUR" else round_money(fee / rate)
         except ValidationError:
             fee_eur = Decimal(0)
-        self.net.setPlaceholderText(f"{eur - fee_eur:.2f}")
+        self.net.setPlaceholderText(fmt_number(eur - fee_eur))
         self._update_set_aside(eur, fee_eur)
 
     def _update_set_aside(self, eur: Decimal, fee_eur: Decimal) -> None:
@@ -185,13 +226,13 @@ class PaymentForm(QScrollArea):
         base = eur - fee_eur if profile.turnover_basis == "net_of_fees" else eur
         try:
             info = contribution_rate(from_qdate(self.date.date()), profile, self.book.figures)
-        except Exception:  # noqa: BLE001 - a missing figure is reported on the dashboard
+        except MissingFigure:  # reported on the Limits tab
             self.set_aside.clear()
             return
-        self.set_aside.setText(f"{fmt_money(round_money(base * info.rate))}  ({info.rate * 100:.1f}%)")
+        self.set_aside.setText(f"{fmt_money(round_money(base * info.rate))}  ({fmt_percent(info.rate)})")
 
     def _choose_receipt(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Attach a receipt")
+        path, _filter = QFileDialog.getOpenFileName(self, tr("Attach a receipt"))
         if path:
             self.set_receipt(path)
 
@@ -202,8 +243,9 @@ class PaymentForm(QScrollArea):
     # -- recording ----------------------------------------------------------
     def _confirm(self, summary: str) -> bool:
         reply = QMessageBox.question(
-            self, "Record this payment?",
-            f"{summary}\n\nThis can't be edited afterwards. A correction is a reversing entry.",
+            self, tr("Record this payment?"),
+            tr("{summary}\n\nThis can't be edited afterwards. A correction is a reversing entry.",
+               summary=summary),
             QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Yes,
         )
         return reply == QMessageBox.Yes
@@ -211,43 +253,48 @@ class PaymentForm(QScrollArea):
     def record(self) -> int | None:
         client_id = self.client.currentData()
         if client_id is None:
-            QMessageBox.information(self, "No client", "Add a client under Settings > Clients first.")
+            QMessageBox.information(self, tr("No client"),
+                                    tr("Add a client first, in Settings: the gear icon at the top right."))
             return None
         received_on = from_qdate(self.date.date())
-        summary = (
-            f"{received_on}  ·  {self.client.currentText()}\n{self.description.text().strip()}\n"
-            f"Gross {self.gross.text().strip() or '?'} {self._currency()}, "
-            f"rate {self.rate.text().strip() or '?'}, EUR gross {self.eur_gross.text() or '?'}\n"
-            f"Fee {self.fee.text().strip() or '0'} {self.fee_currency.currentText()}, "
-            f"net {self.net.text().strip() or '?'} {self.net_currency.currentText()}"
+        summary = tr(
+            "{date}  ·  {client}\n{description}\nGross {gross} {currency}, rate {rate}, EUR gross "
+            "{eur}\nFee {fee} {fee_currency}, net {net} {net_currency}",
+            date=self.date.text(), client=self.client.currentText(),
+            description=self.description.text().strip(),
+            gross=self.gross.text().strip() or "?", currency=self._currency(),
+            rate=self.rate.text().strip() or "?", eur=self.eur_gross.text() or "?",
+            fee=self.fee.text().strip() or "0", fee_currency=self.fee_currency.currentText(),
+            net=self.net.text().strip() or "?", net_currency=self.net_currency.currentText(),
         )
         if not self._confirm(summary):
             return None
-        seq = guarded(self, "Payment not recorded", lambda: self.book.ledger.record_payment(
+        seq = guarded(self, tr("Payment not recorded"), lambda: self.book.ledger.record_payment(
             received_on=received_on,
             client_id=client_id,
             description=self.description.text(),
             amount_gross=self.gross.text(),
             fx_rate=self.rate.text(),
-            fx_source=self.rate_source.currentText(),
+            fx_source=self.rate_source.currentData(),
             fee_amount=self.fee.text(),
             fee_currency=self.fee_currency.currentText(),
             net_credited=self.net.text(),
             net_currency=self.net_currency.currentText(),
-            payment_method=self.method.currentText(),
+            payment_method=self.method.currentData(),
             provider_ref=self.reference.text(),
         ))
         if seq is None:
             return None
         if self._receipt:
             # The payment is already recorded, so a bad receipt path must not read as a failure.
-            guarded(self, "Receipt not attached", lambda: self.book.attach_receipt(seq, self._receipt))
+            guarded(self, tr("Receipt not attached"), lambda: self.book.attach_receipt(seq, self._receipt))
         entry = self.book.ledger.get(seq)
         try:
             amount = self.book.limits.set_aside_for(entry, self.book.profile())
-            self.status.emit(f"Entry {seq} recorded. Set aside {fmt_money(amount)} for this payment.")
+            self.status.emit(tr("Entry {seq} recorded. Set aside {amount} for this payment.",
+                                seq=seq, amount=fmt_money(amount)))
         except MissingFigure as exc:
-            self.status.emit(f"Entry {seq} recorded. {exc}")
+            self.status.emit(tr("Entry {seq} recorded. {problem}", seq=seq, problem=exc))
         self._clear()
         self.recorded.emit(seq)
         return seq

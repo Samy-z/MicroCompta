@@ -6,6 +6,7 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
+from ..i18n import fmt_money, tr  # noqa: F401 - fmt_money is re-exported for core and ui
 from .errors import ValidationError
 
 CENT = Decimal("0.01")
@@ -16,12 +17,13 @@ NBSP = " "
 _SYMBOLS = {"EUR": "€", "USD": "$"}
 
 
-def to_decimal(value: Any, field: str = "amount") -> Decimal:
+def to_decimal(value: Any, field: str | None = None) -> Decimal:
     """Parse what a person types: 1234.56, 1234,56, 1,234.56, 1 234,56."""
+    field = field or tr("Amount")
     if isinstance(value, Decimal):
         result = value
     elif isinstance(value, bool):
-        raise ValidationError(f"{field}: not a number")
+        raise ValidationError(tr("{field}: not a number", field=field))
     elif isinstance(value, int):
         result = Decimal(value)
     elif isinstance(value, float):
@@ -31,7 +33,7 @@ def to_decimal(value: Any, field: str = "amount") -> Decimal:
         for space in (" ", NBSP, " "):
             text = text.replace(space, "")
         if not text:
-            raise ValidationError(f"{field}: empty")
+            raise ValidationError(tr("{field}: empty", field=field))
         if "," in text and "." in text:
             if text.rfind(",") > text.rfind("."):
                 text = text.replace(".", "").replace(",", ".")
@@ -42,9 +44,11 @@ def to_decimal(value: Any, field: str = "amount") -> Decimal:
         try:
             result = Decimal(text)
         except InvalidOperation as exc:
-            raise ValidationError(f"{field}: '{value}' is not a number") from exc
+            raise ValidationError(
+                tr("{field}: '{value}' is not a number", field=field, value=value)
+            ) from exc
     if not result.is_finite():
-        raise ValidationError(f"{field}: not a finite number")
+        raise ValidationError(tr("{field}: not a finite number", field=field))
     return result
 
 
@@ -54,16 +58,6 @@ def round_money(value: Decimal) -> Decimal:
 
 def round_euro(value: Decimal) -> Decimal:
     return Decimal(value).quantize(EURO, rounding=ROUND_HALF_UP)
-
-
-def fmt_money(value: Decimal | None, currency: str = "EUR", decimals: int = 2) -> str:
-    """English UI form: €1,234.56 and -$12.00."""
-    if value is None:
-        return "—"
-    d = Decimal(value)
-    symbol = _SYMBOLS.get(currency, f"{currency} ")
-    sign = "-" if d < 0 else ""
-    return f"{sign}{symbol}{abs(d):,.{decimals}f}"
 
 
 def fmt_amount_fr(value: Decimal, currency: str | None = None) -> str:

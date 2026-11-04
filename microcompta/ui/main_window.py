@@ -18,16 +18,21 @@ from ..backup.drive_client import RestDriveClient
 from ..config import APP_ICO, LOGO_DISPLAY_DARK, LOGO_ICON, oauth_client_path, token_path
 from ..core import clock
 from ..core.book import Book
+from ..core.errors import MissingFigure
+from ..core.ledger_policy import UNCONFIRMED
 from ..core.open_questions import OPEN_QUESTIONS
+from ..i18n import current_language, tr
+from .language import apply_language
+from .models import wrap_tip
 from .panels.annual_panel import AnnualPanel
 from .panels.backup_panel import BackupPanel
-from .panels.common import Banner
+from .panels.common import Banner, bubble
 from .panels.dashboard_panel import DashboardPanel
 from .panels.deadlines_panel import DeadlinesPanel
 from .panels.invoices_panel import InvoicesPanel
 from .panels.ledger_panel import LedgerPanel
 from .panels.payment_form import PaymentForm
-from .panels.settings_panel import SettingsPanel
+from .panels.settings_panel import SettingsDialog
 from .theme import STYLESHEET
 from .tray import TrayController
 from .widgets.collapse import CollapsedStrip, DockTitleBar
@@ -60,22 +65,41 @@ class MainWindow(QMainWindow):
         self._told_about_tray = False
         self._last_day = clock.today()
         self._closed = False
+        self.payment_dock: QDockWidget | None = None
 
+        apply_language(book.profile().language)
         self.setWindowTitle("MicroCompta")
         self.setStyleSheet(STYLESHEET)
         self._size_to_primary_screen()
+        self._apply_icon()
 
-        # -- left dock ------------------------------------------------------
-        self.form = PaymentForm(book)
-        dock = QDockWidget("Record a payment", self)
-        dock.setObjectName("paymentDock")
-        dock.setWidget(self.form)
-        dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
-        title = DockTitleBar("Record a payment")
+        self._build_ui()
+        self._build_shortcuts()
+        self._build_tray()
+        self._start_timers()
+        self.reload_all()
+        self._first_run()
+
+    # -- building -----------------------------------------------------------
+    def _build_ui(self) -> None:
+        """Everything that shows text. Built again when the language changes."""
+        # Left dock. The same dock across rebuilds: only its contents change.
+        if self.payment_dock is None:
+            self.payment_dock = QDockWidget(self)
+            self.payment_dock.setObjectName("paymentDock")
+            self.payment_dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
+            self.addDockWidget(Qt.LeftDockWidgetArea, self.payment_dock)
+        for stale in (self.payment_dock.widget(), self.payment_dock.titleBarWidget()):
+            if stale is not None:
+                stale.deleteLater()
+        self.form = PaymentForm(self.book)
+        self.payment_dock.setWindowTitle(tr("Record a payment"))
+        self.payment_dock.setWidget(self.form)
+        title = DockTitleBar(tr("Record a payment"), tr(
+            "Enter each payment here as it arrives. It goes straight into the ledger."
+        ))
         title.collapse_requested.connect(self.collapse_dock)
-        dock.setTitleBarWidget(title)
-        self.addDockWidget(Qt.LeftDockWidgetArea, dock)
-        self.payment_dock = dock
+        self.payment_dock.setTitleBarWidget(title)
 
         self.strip_bar = QToolBar("Strip", self)
         self.strip_bar.setObjectName("controlsStripBar")
@@ -83,54 +107,92 @@ class MainWindow(QMainWindow):
         self.strip_bar.setFloatable(False)
         self.strip_bar.setContextMenuPolicy(Qt.PreventContextMenu)
         self.strip_bar.toggleViewAction().setVisible(False)
-        strip = CollapsedStrip("RECORD A PAYMENT")
+        strip = CollapsedStrip(tr("RECORD A PAYMENT"))
         strip.clicked.connect(self.expand_dock)
         self.strip_bar.addWidget(strip)
         self.addToolBar(Qt.LeftToolBarArea, self.strip_bar)
         self.strip_bar.hide()
 
-        # -- centre ---------------------------------------------------------
-        self.dashboard_panel = DashboardPanel(book)
-        self.ledger_panel = LedgerPanel(book)
-        self.invoices_panel = InvoicesPanel(book)
-        self.deadlines_panel = DeadlinesPanel(book)
-        self.annual_panel = AnnualPanel(book)
-        self.backup_panel = BackupPanel(book, self.tokens)
-        self.settings_panel = SettingsPanel(book)
+        # Centre
+        self.dashboard_panel = DashboardPanel(self.book)
+        self.ledger_panel = LedgerPanel(self.book)
+        self.invoices_panel = InvoicesPanel(self.book)
+        self.deadlines_panel = DeadlinesPanel(self.book)
+        self.annual_panel = AnnualPanel(self.book)
+        self.backup_panel = BackupPanel(self.book, self.tokens)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.dashboard_panel, "Limits")
-        self.tabs.addTab(self.ledger_panel, "Payments")
-        self.tabs.addTab(self.invoices_panel, "Invoices")
-        self.tabs.addTab(self.deadlines_panel, "Deadlines")
-        self.tabs.addTab(self.annual_panel, "Annual")
-        self.tabs.addTab(self.backup_panel, "Backup")
-        self.tabs.addTab(self.settings_panel, "Settings")
+        for panel, label, tip in (
+            (self.dashboard_panel, tr("Limits"), tr("Your turnover against each legal limit, and what to set aside.")),
+            (self.ledger_panel, tr("Payments"), tr("The livre des recettes: every payment received, with totals every 3 months.")),
+            (self.invoices_panel, tr("Invoices"), tr("Drafts, issued invoices and credit notes.")),
+            (self.deadlines_panel, tr("Deadlines"), tr("Declarations and other dates, worked out from your start date.")),
+            (self.annual_panel, tr("Annual"), tr("The year's totals, the figure for your tax return, and a review checklist.")),
+            (self.backup_panel, tr("Backup"), tr("Whether each document has reached your Google Drive.")),
+        ):
+            index = self.tabs.addTab(panel, label)
+            self.tabs.setTabToolTip(index, wrap_tip(tip))
 
         central = QWidget()
         central_lay = QVBoxLayout(central)
         central_lay.setContentsMargins(0, 0, 0, 0)
         central_lay.setSpacing(0)
-        self.integrity_banner = Banner("bad")
+        self.integrity_banner = Banner("bad", tip=tr(
+            "The app checks its records against their hash chain at launch and every 6 hours."
+        ))
         central_lay.addWidget(self.integrity_banner)
         central_lay.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
 
-        # -- status bar -----------------------------------------------------
+        # Settings, behind the gear
+        self.settings_dialog = SettingsDialog(self.book, self)
+        self.settings_panel = self.settings_dialog.panel
+
+        # Status bar
         self.setStatusBar(QStatusBar())
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel(tr("Ready"))
+        bubble(self.status_label, tr("The result of the last action."))
         self.statusBar().addWidget(self.status_label, 1)
         self.backup_label = QLabel("")
+        bubble(self.backup_label, tr("Whether your documents have reached Google Drive. See the Backup tab."))
         self.statusBar().addPermanentWidget(self.backup_label)
 
-        self._wire()
-        self._build_shortcuts()
         self._build_header()
-        self._apply_icon()
-        self._build_tray()
-        self._start_timers()
+        self._wire()
+
+    def _teardown_ui(self) -> None:
+        self.settings_dialog.done(0)
+        self.settings_dialog.deleteLater()
+        for bar in (self.strip_bar, self.brand_bar):
+            self.removeToolBar(bar)
+            bar.deleteLater()
+        # The central widget is replaced by _build_ui, not removed here.
+
+    def rebuild_for_language(self) -> None:
+        """Widgets keep the text they were built with, so build them again. Nothing else
+        changes: the records, the timers and any upload in flight carry on."""
+        if self._closed:
+            return
+        settings_tab = self.settings_panel.tabs.currentIndex() if self.settings_dialog.isVisible() else None
+        current_tab = self.tabs.currentIndex()
+        collapsed = not self.payment_dock.isVisible()
+        # Pinned for the rebuild: while the central widget is replaced, the dock would grow to
+        # its maximum width and stay there (measured).
+        self.payment_dock.setFixedWidth(self._dock_width)
+        apply_language(self.book.profile().language)
+        self._teardown_ui()
+        self._build_ui()
+        self.tabs.setCurrentIndex(current_tab)
+        if self.tray is not None:
+            self.tray.retranslate()
         self.reload_all()
-        self._first_run()
+        # Once the layout settles: the text changed, so the width it needs may have.
+        QTimer.singleShot(150, self._fit_dock)
+        if collapsed:
+            self.collapse_dock()
+        if settings_tab is not None:
+            self.open_settings(settings_tab)
+        self.set_status(tr("Language changed."))
 
     # -- geometry -----------------------------------------------------------
     def _size_to_primary_screen(self) -> None:
@@ -155,7 +217,7 @@ class MainWindow(QMainWindow):
         self.strip_bar.hide()
         self.payment_dock.show()
         self._remember_dock(False)
-        if getattr(self, "_dock_fitted", False):
+        if getattr(self, "_dock_width", None):
             self.resizeDocks([self.payment_dock], [self._dock_width], Qt.Horizontal)
 
     def toggle_dock(self) -> None:
@@ -170,18 +232,24 @@ class MainWindow(QMainWindow):
             profile.dock_collapsed = collapsed
             self.book.save_profile(profile)
 
+    def _fit_dock(self) -> None:
+        """Width depends on the text, so it depends on the language."""
+        if self._closed:
+            return
+        panel = self.form
+        needed = panel.widget().minimumSizeHint().width() if panel.widget() else 0
+        width = max(needed + panel.verticalScrollBar().sizeHint().width() + 6, 300)
+        self.payment_dock.setMinimumWidth(width)
+        self.payment_dock.setMaximumWidth(max(width * 2, 560))
+        self._dock_width = width
+        self.resizeDocks([self.payment_dock], [width], Qt.Horizontal)
+
     def showEvent(self, event: Any) -> None:  # noqa: N802
         """Size the dock once the real font metrics are known."""
         super().showEvent(event)
         if not getattr(self, "_dock_fitted", False):
             self._dock_fitted = True
-            panel = self.form
-            needed = panel.widget().minimumSizeHint().width() if panel.widget() else 0
-            width = max(needed + panel.verticalScrollBar().sizeHint().width() + 6, 300)
-            self.payment_dock.setMinimumWidth(width)
-            self.payment_dock.setMaximumWidth(max(width * 2, 560))
-            self._dock_width = width
-            self.resizeDocks([self.payment_dock], [width], Qt.Horizontal)
+            self._fit_dock()
             if self.book.profile().dock_collapsed:
                 self.collapse_dock()
 
@@ -206,7 +274,7 @@ class MainWindow(QMainWindow):
             logo.setText("MicroCompta")
             logo.setObjectName("h1")
         logo.setContentsMargins(10, 4, 12, 4)
-        logo.setToolTip("MicroCompta: personal accounting for a French micro-entrepreneur")
+        bubble(logo, tr("MicroCompta: personal accounting for a French micro-entrepreneur."), "MicroCompta")
         bar.addWidget(logo)
 
         spacer = QWidget()
@@ -214,12 +282,23 @@ class MainWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         bar.addWidget(spacer)
 
-        help_button = QPushButton("Help")
+        gear = QPushButton()
+        gear.setObjectName("brandGear")
+        gear.setFixedSize(34, 29)
+        gear.setCursor(Qt.PointingHandCursor)
+        bubble(gear, tr("Settings: your identity, your clients, rates and limits, and the app's "
+                        "language (Ctrl+,)."), tr("Settings"))
+        gear.clicked.connect(lambda _c=False: self.open_settings())
+        bar.addWidget(gear)
+        self.settings_button = gear
+
+        help_button = QPushButton(tr("Help"))
         help_button.setObjectName("brandHelp")
-        help_button.setToolTip("How this works  (F1)")
+        bubble(help_button, tr("How this works, and what is still open (F1)."))
         help_button.setCursor(Qt.PointingHandCursor)
         help_button.clicked.connect(self._show_help)
         bar.addWidget(help_button)
+        self.help_button = help_button
 
         bar.toggleViewAction().setVisible(False)
         bar.setContextMenuPolicy(Qt.PreventContextMenu)
@@ -233,6 +312,16 @@ class MainWindow(QMainWindow):
         path = APP_ICO if APP_ICO.exists() else LOGO_ICON
         if path.exists():
             self.setWindowIcon(QIcon(str(path)))
+
+    # -- settings -----------------------------------------------------------
+    def open_settings(self, tab: int = 0) -> None:
+        if self._closed:
+            return
+        self.settings_panel.reload()
+        self.settings_panel.tabs.setCurrentIndex(tab)
+        hint = self.size()
+        self.settings_dialog.resize(max(int(hint.width() * 0.86), 900), max(int(hint.height() * 0.88), 600))
+        self.settings_dialog.open()
 
     # -- tray ---------------------------------------------------------------
     def _build_tray(self) -> None:
@@ -260,6 +349,10 @@ class MainWindow(QMainWindow):
         for panel in (self.ledger_panel, self.invoices_panel, self.deadlines_panel,
                       self.settings_panel):
             panel.changed.connect(self.on_records_changed)
+        # Not directly: this deletes the dialog whose button is still being pressed.
+        self.settings_panel.language_changed.connect(
+            lambda: QTimer.singleShot(0, self.rebuild_for_language)
+        )
         self.backup_panel.upload_requested.connect(self.upload_now)
         self.backup_panel.snapshot_requested.connect(lambda: self.run_snapshot(announce=True))
         self.backup_panel.sign_in_requested.connect(self.start_sign_in)
@@ -267,15 +360,16 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(lambda _i: self.reload_current())
 
     def _build_shortcuts(self) -> None:
-        for text, key, slot in (
-            ("Show or hide the payment form", "Ctrl+B", self.toggle_dock),
-            ("Help", "F1", self._show_help),
-            ("Upload now", "Ctrl+U", self.upload_now),
+        for key, slot in (
+            ("Ctrl+B", self.toggle_dock),
+            ("F1", self._show_help),
+            ("Ctrl+U", self.upload_now),
+            ("Ctrl+,", self.open_settings),
         ):
-            action = QAction(text, self)
+            action = QAction(self)
             action.setShortcut(QKeySequence(key))
             action.setShortcutContext(Qt.ApplicationShortcut)
-            action.triggered.connect(slot)
+            action.triggered.connect(lambda _c=False, run=slot: run())
             self.addAction(action)
 
     def _start_timers(self) -> None:
@@ -313,12 +407,11 @@ class MainWindow(QMainWindow):
     def _first_run(self) -> None:
         profile = self.book.profile()
         if not profile.is_set_up:
-            self.tabs.setCurrentWidget(self.settings_panel)
-            self.set_status("Welcome. Enter your details to begin.")
+            self.set_status(tr("Welcome. Enter your details to begin."))
+            QTimer.singleShot(0, lambda: self.open_settings(0))
         elif not self.book.clients.list():
-            self.tabs.setCurrentWidget(self.settings_panel)
-            self.settings_panel.tabs.setCurrentIndex(1)
-            self.set_status("Add your client to start recording payments.")
+            self.set_status(tr("Add your client to start recording payments."))
+            QTimer.singleShot(0, lambda: self.open_settings(1))
 
     # -- refresh ------------------------------------------------------------
     def reload_all(self) -> None:
@@ -326,8 +419,7 @@ class MainWindow(QMainWindow):
             return
         self.form.reload()
         for panel in (self.dashboard_panel, self.ledger_panel, self.invoices_panel,
-                      self.deadlines_panel, self.annual_panel, self.backup_panel,
-                      self.settings_panel):
+                      self.deadlines_panel, self.annual_panel, self.backup_panel):
             panel.reload()
         self._refresh_labels()
 
@@ -345,35 +437,37 @@ class MainWindow(QMainWindow):
 
     def _refresh_labels(self) -> None:
         overdue, soon = self.deadlines_panel.counts()
-        label = "Deadlines"
+        label = tr("Deadlines")
         if overdue:
-            label += f"  ({overdue} overdue)"
+            label += "  " + tr("({count} overdue)", count=overdue)
         elif soon:
-            label += f"  ({soon} soon)"
+            label += "  " + tr("({count} soon)", count=soon)
         self.tabs.setTabText(self.tabs.indexOf(self.deadlines_panel), label)
 
         stale = len(self.book.invoices.stale())
-        self.tabs.setTabText(
-            self.tabs.indexOf(self.invoices_panel),
-            f"Invoices  ({stale} to correct)" if stale else "Invoices",
-        )
+        invoices = tr("Invoices")
+        if stale:
+            invoices += "  " + tr("({count} to correct)", count=stale)
+        self.tabs.setTabText(self.tabs.indexOf(self.invoices_panel), invoices)
 
         counts = self.book.queue.counts()
         state = self.tokens.state()
         waiting = counts["pending"] + counts["failed"]
         if state == "connected":
-            text = f"Drive: {waiting} waiting" if waiting else "Drive: all uploaded"
+            text = tr("Drive: {count} waiting", count=waiting) if waiting else tr("Drive: all uploaded")
         else:
-            text = f"Drive: not connected, {waiting} waiting" if waiting else "Drive: not connected"
+            text = (tr("Drive: not connected, {count} waiting", count=waiting) if waiting
+                    else tr("Drive: not connected"))
         if counts["failed"]:
-            text += f", {counts['failed']} failed"
+            text += ", " + tr("{count} failed", count=counts["failed"])
         self.backup_label.setText(text)
-        tab = "Backup"
+        tab = tr("Backup")
         if counts["failed"]:
-            tab += f"  ({counts['failed']} failed)"
+            tab += "  " + tr("({count} failed)", count=counts["failed"])
         self.tabs.setTabText(self.tabs.indexOf(self.backup_panel), tab)
         if self.tray is not None:
-            self.tray.set_status(f"{overdue} overdue, {soon} soon. {text}.")
+            self.tray.set_status(tr("{overdue} overdue, {soon} soon. {backup}.",
+                                    overdue=overdue, soon=soon, backup=text))
 
     def set_status(self, text: str) -> None:
         self.status_label.setText(text)
@@ -387,8 +481,6 @@ class MainWindow(QMainWindow):
         if today != self._last_day:
             self._last_day = today
             self.reload_all()
-        from ..core.errors import MissingFigure
-
         try:
             pending = self.book.deadlines.pending_reminders(today)
         except MissingFigure as exc:
@@ -400,8 +492,8 @@ class MainWindow(QMainWindow):
             self.book.deadlines.mark_reminded(item)
         lines = [item["_message"] for item in pending[:4]]
         if len(pending) > 4:
-            lines.append(f"and {len(pending) - 4} more")
-        self.notify("Deadlines", "\n".join(lines))
+            lines.append(tr("and {count} more", count=len(pending) - 4))
+        self.notify(tr("Deadlines"), "\n".join(lines))
         self._refresh_labels()
 
     def notify(self, title: str, message: str) -> None:
@@ -422,7 +514,7 @@ class MainWindow(QMainWindow):
     def upload_now(self) -> None:
         if self.tokens.state() != "connected":
             self.tabs.setCurrentWidget(self.backup_panel)
-            self.set_status("Connect Google Drive first: the steps are on the Backup tab.")
+            self.set_status(tr("Connect Google Drive first: the steps are on the Backup tab."))
             return
         self.book.queue.retry()
         self.tick_queue()
@@ -433,21 +525,21 @@ class MainWindow(QMainWindow):
         worker.failed.connect(self._on_upload_failed)
         worker.finished.connect(self._after_upload)
         self._upload_worker = worker
-        self.set_status("Uploading to Google Drive…")
+        self.set_status(tr("Uploading to Google Drive…"))
         worker.start()
 
     def _on_upload_done(self, report: Any) -> None:
         if report.needs_sign_in:
-            self.notify("Backup paused", report.stopped)
+            self.notify(tr("Backup paused"), report.stopped)
         elif report.failed:
-            self.notify("Upload failed", f"{report.failed} document(s). See the Backup tab.")
+            self.notify(tr("Upload failed"), tr("{count} document(s). See the Backup tab.", count=report.failed))
         elif report.uploaded:
-            self.set_status(f"{report.uploaded} document(s) uploaded and verified.")
+            self.set_status(tr("{count} document(s) uploaded and verified.", count=report.uploaded))
         elif report.stopped:
-            self.set_status(f"Backup waiting: {report.stopped}")
+            self.set_status(tr("Backup waiting: {reason}", reason=report.stopped))
 
     def _on_upload_failed(self, message: str) -> None:
-        self.set_status(f"Upload pass failed: {message}")
+        self.set_status(tr("Upload pass failed: {reason}", reason=message))
 
     def _after_upload(self) -> None:
         if self._closed:
@@ -468,25 +560,25 @@ class MainWindow(QMainWindow):
         worker.finished.connect(lambda: self.backup_panel.set_signing_in(False))
         self._sign_in_worker = worker
         self.backup_panel.set_signing_in(True)
-        self.set_status("Waiting for you to sign in, in the browser…")
+        self.set_status(tr("Waiting for you to sign in, in the browser…"))
         worker.start()
 
     def _on_signed_in(self) -> None:
-        self.set_status("Signed in to Google Drive. Uploading what was waiting.")
+        self.set_status(tr("Signed in to Google Drive. Uploading what was waiting."))
         self.book.queue.retry()
         self.tick_queue()
         self._refresh_labels()
 
     def _on_sign_in_failed(self, message: str) -> None:
         if not self._quitting:
-            QMessageBox.warning(self, "Sign-in did not complete", message)
-        self.set_status("Sign-in did not complete.")
+            QMessageBox.warning(self, tr("Sign-in did not complete"), message)
+        self.set_status(tr("Sign-in did not complete."))
 
     def sign_out(self) -> None:
         self.tokens.sign_out()
         self.backup_panel.reload()
         self._refresh_labels()
-        self.set_status("Signed out. Uploads wait until you sign in again.")
+        self.set_status(tr("Signed out. Uploads wait until you sign in again."))
 
     # -- snapshots and integrity -------------------------------------------
     def run_snapshot(self, announce: bool = False) -> list[int]:
@@ -496,15 +588,15 @@ class MainWindow(QMainWindow):
             added = self.book.snapshots.run()
         except Exception as exc:  # noqa: BLE001 - a failed backup must be seen, not crash the app
             log.exception("Snapshot failed")
-            self.set_status(f"Snapshot failed: {exc}")
+            self.set_status(tr("Snapshot failed: {reason}", reason=exc))
             return []
         if added:
-            self.set_status("Records backed up: database snapshot and CSV exports queued for Drive.")
+            self.set_status(tr("Records backed up: database snapshot and CSV exports queued for Drive."))
             self._refresh_labels()
             self.backup_panel.reload()
             self.tick_queue()
         elif announce:
-            self.set_status("Nothing has changed since the last snapshot.")
+            self.set_status(tr("Nothing has changed since the last snapshot."))
         return added
 
     def check_integrity(self) -> list[str]:
@@ -514,11 +606,11 @@ class MainWindow(QMainWindow):
         if problems:
             log.error("Integrity problems: %s", problems)
             shown = "\n".join(problems[:5])
-            more = f"\nand {len(problems) - 5} more" if len(problems) > 5 else ""
-            self.integrity_banner.show_text(
+            more = "\n" + tr("and {count} more", count=len(problems) - 5) if len(problems) > 5 else ""
+            self.integrity_banner.show_text(tr(
                 "The records don't match their checks. Don't delete anything; your Drive backup "
-                f"holds earlier copies.\n{shown}{more}"
-            )
+                "holds earlier copies.\n{problems}", problems=shown + more,
+            ))
         else:
             self.integrity_banner.show_text("")
         return problems
@@ -526,21 +618,23 @@ class MainWindow(QMainWindow):
     # -- help ---------------------------------------------------------------
     def _show_help(self) -> None:
         questions = "".join(
-            f"<li><b>{q['topic']}</b> ({q['who']}): {q['status']}.</li>" for q in OPEN_QUESTIONS
+            f"<li><b>{tr(q['topic'])}</b> ({tr(q['who'])}): {tr(q['status'])}.</li>" for q in OPEN_QUESTIONS
         )
         QMessageBox.information(
-            self, "How this works",
-            "<b>Payments</b>: one entry per payment received. Turnover counts on the date received. "
-            "Entries can't be edited; a correction is a reversing entry with a reason.<br><br>"
-            "<b>Invoices</b>: a monthly summary drafted from that month's payments. Drafts are "
-            "fine without a SIREN, but a final invoice needs one. Numbers are unbroken and issued "
-            "invoices can't change; a correction is a credit note.<br><br>"
-            "<b>Backup</b>: every document is saved locally and queued for your Google Drive, "
-            "and counts as uploaded only once Drive reports the same checksum.<br><br>"
-            "<b>Reminders</b> reach the tray while the app runs, so keep it in the tray.<br><br>"
-            f"<b>Still open:</b><ul>{questions}</ul>"
-            "<i>MicroCompta reminds and adds up. It doesn't give tax advice, and it doesn't do "
-            "e-reporting or file anything with URSSAF.</i>",
+            self, tr("How this works"),
+            tr("<b>Payments</b>: one entry per payment received. Turnover counts on the date received. "
+               "Entries can't be edited; a correction is a reversing entry with a reason.<br><br>"
+               "<b>Invoices</b>: a monthly summary drafted from that month's payments. Drafts are "
+               "fine without a SIREN, but a final invoice needs one. Numbers are unbroken and issued "
+               "invoices can't change; a correction is a credit note.<br><br>"
+               "<b>Backup</b>: every document is saved locally and queued for your Google Drive, "
+               "and counts as uploaded only once Drive reports the same checksum.<br><br>"
+               "<b>Reminders</b> reach the tray while the app runs, so keep it in the tray.<br><br>"
+               "<b>Bubbles</b>: hold the mouse over any number, button or line to see what it means. "
+               "Tab onto a number card for the same thing from the keyboard.<br><br>"
+               "<b>Still open:</b><ul>{questions}</ul>"
+               "<i>MicroCompta reminds and adds up. It doesn't give tax advice, and it doesn't do "
+               "e-reporting or file anything with URSSAF.</i>", questions=questions),
         )
 
     # -- closing ------------------------------------------------------------
@@ -559,14 +653,15 @@ class MainWindow(QMainWindow):
             self.hide()
             if not self._told_about_tray:
                 self._told_about_tray = True
-                self.tray.notify("MicroCompta", "Still running here so reminders can fire. "
-                                                "Quit from this icon's menu.")
+                self.tray.notify("MicroCompta", tr(
+                    "Still running here so reminders can fire. Quit from this icon's menu."
+                ))
             return
 
         self._quitting = True
         if self._upload_running():
             event.ignore()
-            self.set_status("Finishing the upload before closing…")
+            self.set_status(tr("Finishing the upload before closing…"))
             QTimer.singleShot(QUIT_FLUSH_LIMIT_MS, self._force_quit)
             return
         if not self._flush_tried:
@@ -574,12 +669,12 @@ class MainWindow(QMainWindow):
             self.run_snapshot()
             if self._upload_running():
                 event.ignore()
-                self.set_status("Uploading to Drive before closing…")
+                self.set_status(tr("Uploading to Drive before closing…"))
                 QTimer.singleShot(QUIT_FLUSH_LIMIT_MS, self._force_quit)
                 return
             if self.tokens.state() == "connected" and self.book.queue.has_due():
                 event.ignore()
-                self.set_status("Uploading to Drive before closing…")
+                self.set_status(tr("Uploading to Drive before closing…"))
                 self._start_upload()
                 QTimer.singleShot(QUIT_FLUSH_LIMIT_MS, self._force_quit)
                 return
@@ -605,6 +700,7 @@ class MainWindow(QMainWindow):
         for timer_name in ("queue_timer", "reminder_timer", "snapshot_timer", "snapshot_debounce",
                            "integrity_timer"):
             getattr(self, timer_name).stop()
+        self.settings_dialog.done(0)
         for worker in (self._upload_worker, self._sign_in_worker):
             if worker is not None and worker.isRunning():
                 worker.cancel()
@@ -618,3 +714,6 @@ class MainWindow(QMainWindow):
         if event is not None:
             event.accept()
         QApplication.quit()
+
+
+__all__ = ["MainWindow", "UNCONFIRMED", "current_language"]

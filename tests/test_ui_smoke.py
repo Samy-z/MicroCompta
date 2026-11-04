@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -17,14 +18,26 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from PySide6.QtCore import QLocale, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDateEdit, QDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QAbstractButton, QAbstractSpinBox, QApplication, QCalendarWidget, QCheckBox, QComboBox, QDateEdit,
+    QDialog, QDialogButtonBox, QGroupBox, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
+    QTableView, QTableWidget, QTabWidget, QToolTip, QWidget,
+)
 
 import demo_data  # noqa: E402
 from conftest import FakeDrive  # noqa: E402
-from microcompta import config  # noqa: E402
+from microcompta import config, i18n  # noqa: E402
 from microcompta.ui.main_window import MainWindow  # noqa: E402
+from microcompta.ui.models import wrap_tip  # noqa: E402
 from microcompta.ui.panels import common  # noqa: E402
+from microcompta.ui.panels.common import Chip, StatCard, bubble  # noqa: E402
+from microcompta.ui.panels.invoices_panel import CreditDialog, EditDraftDialog, IssueDialog  # noqa: E402
+from microcompta.ui.panels.ledger_panel import ReverseDialog  # noqa: E402
+from microcompta.ui.panels.settings_panel import ClientDialog, FigureDialog  # noqa: E402
+from microcompta.ui.widgets.table_view import DataTable  # noqa: E402
+from microcompta.ui.widgets.threshold_bar import ThresholdBar  # noqa: E402
 from microcompta.ui.theme import STYLESHEET  # noqa: E402
 
 
@@ -58,7 +71,11 @@ def warnings(monkeypatch) -> list[str]:
 
 
 def make_window(book: Any, qapp: Any, drive: Any = None, state: str = "connected",
-                tmp: Path | None = None) -> MainWindow:
+                tmp: Path | None = None, language: str = "en") -> MainWindow:
+    """English by default, so a test reads the source text. See the French tests below."""
+    profile = book.profile()
+    profile.language = language
+    book.save_profile(profile)
     win = MainWindow(book, client_factory=(lambda: drive), tokens=FakeTokens(state, tmp))
     # The timers fire on the event loop; tests call the same methods directly.
     win.queue_timer.stop()
@@ -90,8 +107,8 @@ def demo(book, pinned_today):
 # -- first launch ------------------------------------------------------------
 def test_first_launch_on_an_empty_book_opens_settings(book, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
-    assert win.tabs.currentWidget() is win.settings_panel
-    assert win.settings_panel.setup_banner.isVisibleTo(win)
+    assert win.settings_dialog.isVisible()
+    assert win.settings_panel.setup_banner.isVisibleTo(win.settings_dialog)
     assert not win.form.record_button.isEnabled()
     for index in range(win.tabs.count()):
         win.tabs.setCurrentIndex(index)
@@ -101,6 +118,7 @@ def test_first_launch_on_an_empty_book_opens_settings(book, qapp, tmp_path):
 
 def test_identity_is_never_prefilled(book, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.settings_panel.reload()
     assert win.settings_panel.legal_name.text() == ""
     assert win.settings_panel.siren.text() == ""
     assert win.settings_panel.address.toPlainText() == ""
@@ -111,6 +129,7 @@ def test_identity_is_never_prefilled(book, qapp, tmp_path):
 def test_settings_save_round_trip(book, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
     panel = win.settings_panel
+    panel.reload()
     panel.legal_name.setText("Camille Exemple")
     panel.address.setPlainText("12 rue de l'Exemple")
     panel.siren.setText("123 456 782")
@@ -125,7 +144,7 @@ def test_settings_save_round_trip(book, qapp, tmp_path):
     assert profile.start_date == date(2026, 11, 2)
     assert profile.acre_enabled is True
     assert profile.declaration_frequency == "quarterly"
-    assert not panel.setup_banner.isVisibleTo(win)
+    assert not panel.setup_banner.isVisibleTo(win.settings_dialog)
     win._finish_quit(None)
 
 
@@ -590,6 +609,7 @@ def test_reverse_dialog_needs_and_records_a_reason(book, demo, qapp, tmp_path, a
 def test_client_dialog_adds_and_edits(book, qapp, tmp_path, answer_dialogs):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
     panel = win.settings_panel
+    panel.reload()
 
     def add(dialog: Any) -> None:
         dialog.name.setText("Client Test")
@@ -622,6 +642,7 @@ def test_figure_dialog_adds_a_later_value_and_the_old_one_stays(
         book, demo, qapp, tmp_path, answer_dialogs):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
     panel = win.settings_panel
+    panel.reload()
     panel.figures_table.select_key("micro_ceiling|2026-01-01")
 
     def fill(dialog: Any) -> None:
@@ -633,6 +654,7 @@ def test_figure_dialog_adds_a_later_value_and_the_old_one_stays(
     panel.edit_figure()
     assert book.figures.value("micro_ceiling", date(2028, 12, 31)) == D(83600)
     assert book.figures.value("micro_ceiling", date(2029, 1, 1)) == D(90000)
+    assert any(r["row_key"] == "micro_ceiling|2029-01-01" for r in panel.figures_table.model.rows)
     win._finish_quit(None)
 
 
@@ -779,6 +801,412 @@ def test_installing_the_client_file_from_the_backup_tab(book, qapp, tmp_path, wa
     assert config.oauth_client_path().exists()
     assert config.ROOT_DIR not in config.oauth_client_path().resolve().parents
     win._finish_quit(None)
+
+
+# -- settings, behind the gear -------------------------------------------------
+def test_settings_is_no_longer_a_tab(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    assert win.tabs.indexOf(win.settings_panel) == -1
+    titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
+    assert "Settings" not in titles
+    assert win.tabs.count() == 6
+    win._finish_quit(None)
+
+
+def test_the_gear_sits_right_next_to_help_and_shows_no_word(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    gear, help_button = win.settings_button, win.help_button
+    assert gear.text() == ""
+    assert gear.accessibleName() == "Settings"
+    assert gear.toolTip()
+    assert gear.parent() is help_button.parent() is win.brand_bar
+    gap = help_button.geometry().left() - gear.geometry().right()
+    assert 0 <= gap <= 12
+    assert help_button.geometry().right() > win.brand_bar.width() - 40
+    win._finish_quit(None)
+
+
+def test_pressing_the_gear_opens_settings(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    assert not win.settings_dialog.isVisible()
+    win.settings_button.click()
+    qapp.processEvents()
+    assert win.settings_dialog.isVisible()
+    assert win.settings_panel.legal_name.text() == "Camille Exemple"
+    win._finish_quit(None)
+
+
+def test_settings_changes_reach_the_main_window(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.open_settings()
+    win.settings_panel.acre.setChecked(False)
+    win.settings_panel.save_profile()
+    assert win.dashboard_panel.stats.cards["rate"].value.text() == "25.6%"
+    assert win.settings_panel.saved_label.text() == "Saved."
+    win._finish_quit(None)
+
+
+@pytest.mark.parametrize("answer, closes, saved", [
+    (QMessageBox.Cancel, False, False),
+    (QMessageBox.Discard, True, False),
+    (QMessageBox.Save, True, True),
+])
+def test_closing_with_unsaved_changes_asks_first(book, demo, qapp, tmp_path, monkeypatch, answer, closes, saved):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.open_settings()
+    monkeypatch.setattr(win.settings_dialog, "_ask_about_unsaved", lambda: answer)
+    win.settings_panel.email.setText("nouveau@example.invalid")
+    win.settings_dialog.reject()
+    qapp.processEvents()
+    assert win.settings_dialog.isVisible() is not closes
+    assert (book.profile().email == "nouveau@example.invalid") is saved
+    win._finish_quit(None)
+
+
+def test_closing_without_changes_asks_nothing(book, demo, qapp, tmp_path, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.open_settings()
+
+    def fail() -> Any:
+        raise AssertionError("Nothing changed, so nothing to ask.")
+
+    monkeypatch.setattr(win.settings_dialog, "_ask_about_unsaved", fail)
+    win.settings_dialog.reject()
+    qapp.processEvents()
+    assert not win.settings_dialog.isVisible()
+    win._finish_quit(None)
+
+
+# -- language ------------------------------------------------------------------
+def test_a_new_install_opens_in_french(book, qapp, tmp_path):
+    win = MainWindow(book, client_factory=lambda: None, tokens=FakeTokens("no_client", tmp_path))
+    assert i18n.current_language() == "fr"
+    assert win.tabs.tabText(0) == "Plafonds"
+    assert win.help_button.text() == "Aide"
+    assert win.settings_panel.language.findData("fr") >= 0
+    win.settings_panel.reload()
+    assert win.settings_panel.language.currentData() == "fr"
+    win._finish_quit(None)
+
+
+def test_qt_own_words_follow_the_language(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    box = win.settings_dialog.findChild(QDialogButtonBox)
+    assert box.button(QDialogButtonBox.Close).text() == "Fermer"
+    assert QLocale().name().startswith("fr")
+    win._finish_quit(None)
+
+
+def test_switching_language_rebuilds_everything_and_loses_nothing(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    assert win.tabs.tabText(1) == "Encaissements"
+    win.tabs.setCurrentWidget(win.invoices_panel)
+    entries = len(book.ledger.entries())
+
+    win.open_settings(0)
+    panel = win.settings_panel
+    panel.language.setCurrentIndex(panel.language.findData("en"))
+    panel.save_profile()
+    QTest.qWait(30)
+    qapp.processEvents()
+
+    assert i18n.current_language() == "en"
+    assert book.profile().language == "en"
+    assert win.tabs.tabText(1) == "Payments"
+    assert win.help_button.text() == "Help"
+    assert win.tabs.currentWidget() is win.invoices_panel    # same place
+    assert win.settings_dialog.isVisible()                   # settings stays open, now in English
+    assert win.settings_panel.save_button.text() == "Save"
+    assert win.dashboard_panel.stats.cards["ytd"].value.text() == "€15,303.49"
+    assert len(book.ledger.entries()) == entries
+    assert book.verify() == []
+    win._finish_quit(None)
+
+
+def test_switching_back_and_forth_keeps_working(book, demo, qapp, tmp_path, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    for code, label in (("en", "Limits"), ("fr", "Plafonds"), ("en", "Limits")):
+        win.open_settings(0)
+        panel = win.settings_panel
+        panel.language.setCurrentIndex(panel.language.findData(code))
+        panel.save_profile()
+        QTest.qWait(30)
+        qapp.processEvents()
+        assert win.tabs.tabText(0) == label
+    monkeypatch.setattr(win.form, "_confirm", lambda _s: True)
+    win.settings_dialog.done(0)
+    fill_form(win)
+    assert win.form.record() is not None   # the rebuilt form still works
+    win._finish_quit(None)
+
+
+def test_saving_without_a_language_change_doesnt_rebuild(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    before = win.tabs
+    win.open_settings()
+    win.settings_panel.save_profile()
+    QTest.qWait(30)
+    qapp.processEvents()
+    assert win.tabs is before
+    win._finish_quit(None)
+
+
+def test_recording_in_french_stores_the_key_not_the_french_word(book, demo, qapp, tmp_path, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    monkeypatch.setattr(win.form, "_confirm", lambda _s: True)
+    win.form.method.setCurrentIndex(win.form.method.findData("Bank transfer"))
+    assert win.form.method.currentText() == "Virement bancaire"
+    fill_form(win)
+    seq = win.form.record()
+    assert book.ledger.get(seq)["payment_method"] == "Bank transfer"
+    assert "153,60" in win.status_label.text()
+    win._finish_quit(None)
+
+
+_ENGLISH_WORDS = re.compile(
+    r"\b(the|and|with|your|this|that|from|will|have|not|for|are|you|isn't|can't|doesn't)\b", re.IGNORECASE
+)
+
+
+def _all_text(win: MainWindow, extra: list[QWidget]) -> list[str]:
+    """Every word the app can show: labels, buttons, bubbles, hints, headers, cells."""
+    texts: list[str] = []
+    roots: list[QWidget] = [win] + extra
+    for root in roots:
+        for widget in [root] + root.findChildren(QWidget):
+            if isinstance(widget, (QLabel, QAbstractButton)):
+                texts.append(widget.text())
+            if isinstance(widget, QLineEdit):
+                texts.append(widget.placeholderText())
+            if isinstance(widget, QGroupBox):
+                texts.append(widget.title())
+            if isinstance(widget, QComboBox):
+                texts += [widget.itemText(i) for i in range(widget.count())]
+            if isinstance(widget, QTabWidget):
+                texts += [widget.tabText(i) for i in range(widget.count())]
+                texts += [widget.tabToolTip(i) for i in range(widget.count())]
+            texts.append(widget.toolTip())
+            texts.append(widget.accessibleDescription())
+            if isinstance(widget, DataTable):
+                for row in range(widget.proxy.rowCount()):
+                    for col in range(widget.proxy.columnCount()):
+                        texts.append(str(widget.proxy.index(row, col).data() or ""))
+                for col in widget.model.columns:
+                    texts += [col.title, col.tip]
+    return [t for t in texts if t]
+
+
+def _every_dialog(book: Any, win: MainWindow, demo: dict[str, Any]) -> list[QWidget]:
+    entry = dict(book.ledger.entries()[0])
+    invoice = book.invoices.get(demo["invoices"][9])
+    figure = book.figures.rows()[0]
+    return [
+        ReverseDialog(entry, win),
+        EditDraftDialog(book, demo["invoices"][9], win),
+        IssueDialog(book, invoice, win),
+        CreditDialog("FA-2026-0001", win),
+        ClientDialog(None, win),
+        FigureDialog(figure, win),
+    ]
+
+
+def test_the_french_ui_shows_no_english(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    win.settings_panel.reload()
+    win.deadlines_panel.show_done.setChecked(True)
+    texts = _all_text(win, _every_dialog(book, win, demo))
+    assert len(texts) > 500
+    hits = sorted({t[:90] for t in texts if _ENGLISH_WORDS.search(t)})
+    assert not hits, hits[:10]
+    win._finish_quit(None)
+
+
+def test_no_english_source_string_reaches_the_french_screen(book, demo, qapp, tmp_path):
+    """Catches what the word check can't: one untranslated word, such as a status."""
+    catalog = json.loads(
+        (config.PACKAGE_DATA_DIR / "i18n" / "fr.json").read_text(encoding="utf-8")
+    )["messages"]
+    english_only = set(catalog) - set(catalog.values())
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    win.settings_panel.reload()
+    win.deadlines_panel.show_done.setChecked(True)
+    shown = {t.removeprefix("<qt>").removesuffix("</qt>") for t in _all_text(win, _every_dialog(book, win, demo))}
+    assert not sorted(shown & english_only)
+    win._finish_quit(None)
+
+
+def test_statuses_are_translated_but_stay_keys_underneath(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    backup = win.backup_panel
+    backup.reload()
+    assert backup.table.model.rows[0]["status"] == "pending"
+    assert backup.table.proxy.index(0, 0).data() == "en attente"
+    invoices = win.invoices_panel.table
+    assert invoices.model.rows[0]["status"] == "draft"
+    assert invoices.proxy.index(0, 2).data() == "brouillon"
+    win._finish_quit(None)
+
+
+def test_the_dock_keeps_its_width_after_a_language_switch(book, demo, qapp, tmp_path):
+    """Found on screen: resizing a dock before it is laid out does nothing."""
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    QTest.qWait(30)
+    before = win.payment_dock.width()
+    win.open_settings(0)
+    panel = win.settings_panel
+    panel.language.setCurrentIndex(panel.language.findData("en"))
+    panel.save_profile()
+    for _ in range(4):     # at every moment, not just once it has settled
+        QTest.qWait(80)
+        qapp.processEvents()
+        assert win.payment_dock.width() < before * 1.3
+    assert win.payment_dock.maximumWidth() > before        # unpinned again afterwards
+    win._finish_quit(None)
+
+
+def test_the_english_ui_is_really_english(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.settings_panel.reload()
+    assert win.tabs.tabText(0) == "Limits"
+    assert win.ledger_panel.table.model.columns[1].title == "Received"
+    assert win.form.record_button.text() == "Record payment"
+    assert win.dashboard_panel.cards["ceiling"].title.text() == "Micro ceiling"
+    win._finish_quit(None)
+
+
+# -- every box, button and line has its bubble ---------------------------------
+_NEEDS_OWN_BUBBLE = (QPushButton, QLineEdit, QPlainTextEdit, QComboBox, QDateEdit, QCheckBox,
+                     QGroupBox, StatCard, Chip, ThresholdBar, QTableView, QTableWidget)
+
+
+def _is_qt_internal(widget: QWidget) -> bool:
+    """The parts of a date field, a calendar or a scroll area aren't ours to label."""
+    if widget.objectName().startswith("qt_"):
+        return True
+    parent = widget.parent()
+    while parent is not None:
+        if isinstance(parent, (QCalendarWidget, QAbstractSpinBox, QComboBox)):
+            return True
+        parent = parent.parent()
+    return False
+
+
+def _effective_bubble(widget: QWidget, stop: QWidget) -> str:
+    """A hover falls through to the parent if the widget has no bubble of its own."""
+    current: Any = widget
+    while current is not None and current is not stop:
+        if current.toolTip():
+            return current.toolTip()
+        current = current.parentWidget()
+    return ""
+
+
+def _bubble_gaps(root: QWidget) -> list[str]:
+    gaps = []
+    for widget in root.findChildren(QWidget):
+        if _is_qt_internal(widget):
+            continue
+        name = f"{type(widget).__name__} {widget.objectName()!r}"
+        if isinstance(widget, _NEEDS_OWN_BUBBLE) and not widget.toolTip():
+            label = widget.text() if isinstance(widget, (QAbstractButton, QLabel)) else ""
+            gaps.append(f"{name} {label!r}")
+        elif isinstance(widget, QLabel) and widget.buddy() is not None and not widget.toolTip():
+            # A field's label must say what the field is, not fall through to its group's bubble.
+            gaps.append(f"form label {widget.text()!r}")
+        elif isinstance(widget, QLabel) and widget.text() and not _effective_bubble(widget, root):
+            gaps.append(f"{name} {widget.text()[:50]!r}")
+        elif isinstance(widget, QTabWidget):
+            gaps += [f"tab {widget.tabText(i)!r}" for i in range(widget.count()) if not widget.tabToolTip(i)]
+        elif isinstance(widget, DataTable):
+            gaps += [f"column {c.title!r}" for c in widget.model.columns if not c.tip]
+    return gaps
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
+def test_everything_in_the_main_window_has_a_bubble(book, demo, qapp, tmp_path, language):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language=language)
+    win.settings_panel.reload()
+    gaps = _bubble_gaps(win)
+    assert not gaps, gaps
+    win._finish_quit(None)
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
+def test_every_dialog_has_its_bubbles(book, demo, qapp, tmp_path, language):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language=language)
+    for dialog in _every_dialog(book, win, demo):
+        gaps = _bubble_gaps(dialog)
+        assert not gaps, (type(dialog).__name__, gaps)
+    win._finish_quit(None)
+
+
+def test_bubbles_stay_after_each_kind_of_refresh(book, demo, qapp, tmp_path):
+    """Several bubbles are written by reload(): they must not be left blank by it."""
+    win = make_window(book, qapp, state="connected", tmp=tmp_path)
+    win.reload_all()
+    win.backup_panel.reload()
+    assert not _bubble_gaps(win.backup_panel)
+    assert not _bubble_gaps(win.dashboard_panel)
+    win._finish_quit(None)
+
+
+def test_number_cards_say_what_they_are_and_their_value(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    card = win.dashboard_panel.stats.cards["ytd"]
+    assert "from 1 January" in card.toolTip()
+    assert card.accessibleName() == "Year to date: €15,303.49"
+    assert card.accessibleDescription()
+    assert card.focusPolicy() == Qt.TabFocus    # reachable without a mouse
+    win._finish_quit(None)
+
+
+def test_bubbles_with_figures_stay_up_to_date(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    stats = win.dashboard_panel.stats.cards
+    assert "of 179 days" in stats["projection"].toolTip()
+    assert "40,998" in stats["ceiling_pct"].toolTip()
+    assert "BNC + ACRE" in stats["rate"].toolTip()
+    assert "Turnover declaration" in stats["next"].toolTip()
+    win._finish_quit(None)
+
+
+def _shown_bubble(qapp: Any, widget: QWidget) -> QWidget:
+    QToolTip.showText(widget.mapToGlobal(widget.rect().bottomLeft()), widget.toolTip(), widget)
+    qapp.processEvents()
+    return next(w for w in qapp.topLevelWidgets() if w.objectName() == "qtooltip_label" and w.isVisible())
+
+
+def test_a_long_bubble_is_a_comfortable_width_and_a_short_one_stays_on_one_line(book, demo, qapp, tmp_path):
+    """Found by measuring: left alone, Qt wrapped two sentences into a 135 px column."""
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    long_tip = _shown_bubble(qapp, win.dashboard_panel.stats.cards["projection"])
+    assert long_tip.width() >= 300
+    assert long_tip.height() < 120
+    QToolTip.hideText()
+    qapp.processEvents()
+    bubble(win.help_button, "Short text.")
+    short_tip = _shown_bubble(qapp, win.help_button)
+    assert short_tip.height() < 45
+    QToolTip.hideText()
+    win._finish_quit(None)
+
+
+def test_bubbles_are_dark_and_use_the_app_font_size(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    tip = _shown_bubble(qapp, win.settings_button)
+    assert tip.grab().toImage().pixelColor(4, 4).name() == "#20242e"
+    assert tip.font().pixelSize() == 12
+    QToolTip.hideText()
+    win._finish_quit(None)
+
+
+def test_a_bubble_shows_angle_brackets_literally():
+    assert "a &lt; b &amp; c" in wrap_tip("a < b & c")
+
+
+def test_every_bubble_is_rich_text_so_it_can_wrap():
+    assert wrap_tip("short").startswith("<qt>")
+    assert wrap_tip("long " * 40).startswith("<qt>")
 
 
 # -- look --------------------------------------------------------------------

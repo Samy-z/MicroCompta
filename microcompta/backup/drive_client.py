@@ -20,6 +20,8 @@ from urllib.parse import urlsplit
 
 import requests
 
+from ..i18n import tr
+
 log = logging.getLogger(__name__)
 
 API_URL = "https://www.googleapis.com/drive/v3/files"
@@ -109,11 +111,11 @@ class RestDriveClient:
     @staticmethod
     def _guard(method: str, url: str) -> None:
         if method.upper() not in ALLOWED_METHODS:
-            raise ForbiddenRequest(f"Method {method} is not allowed: nothing is ever deleted.")
+            raise ForbiddenRequest(tr("Method {method} is not allowed: nothing is ever deleted.", method=method))
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
         if parts.scheme != "https" or not host.endswith(".googleapis.com"):
-            raise ForbiddenRequest("Only Google's API hosts over HTTPS are allowed.")
+            raise ForbiddenRequest(tr("Only Google's API hosts over HTTPS are allowed."))
 
     def _request(self, method: str, url: str, *, params: dict[str, Any] | None = None,
                  headers: dict[str, str] | None = None, json_body: Any = None,
@@ -130,7 +132,7 @@ class RestDriveClient:
             except requests.RequestException as exc:
                 # The type only: the message of a connection error can carry the URL.
                 raise TransientDriveError(
-                    f"No connection to Google Drive ({type(exc).__name__})."
+                    tr("No connection to Google Drive ({error}).", error=type(exc).__name__)
                 ) from None
             if response.status_code == 401 and attempt == 1:
                 self.tokens.drop_access_token()
@@ -148,7 +150,7 @@ class RestDriveClient:
         log.warning("Drive %s failed: HTTP %s %s", what, status, reason)
         detail = f"{what}: HTTP {status} {message}".strip()
         if status == 401:
-            raise AuthRequired("Google refused the sign-in. Reconnect Google Drive.")
+            raise AuthRequired(tr("Google refused the sign-in. Reconnect Google Drive."))
         if status == 429 or status >= 500 or reason in _TRANSIENT_REASONS:
             raise TransientDriveError(detail)
         raise PermanentDriveError(detail, status=status)
@@ -161,7 +163,7 @@ class RestDriveClient:
                  f"and '{parent}' in parents and trashed = false",
             "fields": "files(id)",
             "pageSize": 1,
-        }), "folder lookup")
+        }), tr("folder lookup"))
         files = response.json().get("files", [])
         return files[0]["id"] if files else None
 
@@ -171,7 +173,7 @@ class RestDriveClient:
             body["parents"] = [parent_id]
         response = self._checked(
             self._request("POST", API_URL, params={"fields": "id"}, json_body=body),
-            "folder creation",
+            tr("folder creation"),
         )
         return response.json()["id"]
 
@@ -181,13 +183,13 @@ class RestDriveClient:
             "q": f"name = '{_quote(name)}' and '{_quote(parent_id)}' in parents and trashed = false",
             "fields": f"files({FILE_FIELDS})",
             "pageSize": 20,
-        }), "file lookup")
+        }), tr("file lookup"))
         return [_remote(f) for f in response.json().get("files", [])]
 
     def metadata(self, file_id: str) -> RemoteFile:
         response = self._checked(
             self._request("GET", f"{API_URL}/{_quote(file_id)}", params={"fields": FILE_FIELDS}),
-            "checksum check",
+            tr("checksum check"),
         )
         return _remote(response.json())
 
@@ -201,14 +203,14 @@ class RestDriveClient:
             params={"uploadType": "resumable", "fields": FILE_FIELDS},
             headers={"X-Upload-Content-Type": mime, "X-Upload-Content-Length": str(size)},
             json_body={"name": name, "parents": [parent_id]},
-        ), "upload start")
+        ), tr("upload start"))
         session_uri = start.headers.get("Location")
         if not session_uri:
-            raise TransientDriveError("Google did not return an upload session.")
+            raise TransientDriveError(tr("Google did not return an upload session."))
         with open(path, "rb") as fh:
             done = self._checked(self._request(
                 "PUT", session_uri,
                 headers={"Content-Type": mime, "Content-Length": str(size)},
                 data=fh,
-            ), "upload")
+            ), tr("upload"))
         return _remote(done.json())

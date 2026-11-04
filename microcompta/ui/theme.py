@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..config import ASSETS_DIR
+from ..i18n import N_
 
 
 def _asset_url(name: str) -> str:
@@ -14,6 +15,8 @@ ARROW_UP = _asset_url("arrow_up.svg")
 ARROW_DOWN = _asset_url("arrow_down.svg")
 ARROW_UP_DIM = _asset_url("arrow_up_dim.svg")
 ARROW_DOWN_DIM = _asset_url("arrow_down_dim.svg")
+GEAR = _asset_url("gear.svg")
+GEAR_HOVER = _asset_url("gear_hover.svg")
 
 BG = "#14161c"
 BG_ALT = "#1a1d25"
@@ -36,19 +39,19 @@ LEVEL_COLOURS = {
     "bad": BAD,
 }
 
+# Statuses are stored as these words. Marked here so they get translated when shown.
 STATUS_COLOURS = {
-    "uploaded": GOOD,
-    "done": GOOD,
-    "issued": GOOD,
-    "pending": WARN,
-    "due soon": WARN,
-    "draft": WARN,
-    "failed": BAD,
-    "overdue": BAD,
-    "reversed": BAD,
-    "upcoming": FG_DIM,
-    "no date yet": FG_DIM,
-    "passed": FG_DIM,
+    N_("uploaded"): GOOD,
+    N_("done"): GOOD,
+    N_("issued"): GOOD,
+    N_("pending"): WARN,
+    N_("due soon"): WARN,
+    N_("draft"): WARN,
+    N_("failed"): BAD,
+    N_("overdue"): BAD,
+    N_("upcoming"): FG_DIM,
+    N_("no date yet"): FG_DIM,
+    N_("passed"): FG_DIM,
 }
 
 STYLESHEET = f"""
@@ -189,7 +192,9 @@ QToolTip {{
     background: {BG_RAISED};
     color: {FG};
     border: 1px solid {ACCENT_DIM};
-    padding: 4px;
+    padding: 6px;
+    font-family: "Segoe UI", "Inter", system-ui, sans-serif;
+    font-size: 12px;
 }}
 QToolBar#brandBar {{
     background: {BG_RAISED};
@@ -244,6 +249,22 @@ QPushButton#brandHelp {{
 QPushButton#brandHelp:hover {{ color: {FG}; border-color: {ACCENT}; background: {BG_ALT}; }}
 QPushButton#brandHelp:pressed {{ background: {ACCENT_DIM}; color: #ffffff; }}
 
+QPushButton#brandGear {{
+    background: transparent;
+    border: 1px solid {BORDER};
+    border-radius: 4px;
+    padding: 4px;
+    margin-right: 6px;
+    image: url({GEAR});
+}}
+QPushButton#brandGear:hover {{
+    border-color: {ACCENT};
+    background: {BG_ALT};
+    image: url({GEAR_HOVER});
+}}
+QPushButton#brandGear:focus {{ border-color: {ACCENT}; }}
+QPushButton#brandGear:pressed {{ background: {ACCENT_DIM}; }}
+
 QLabel#h1 {{ font-size: 15px; font-weight: 700; }}
 QLabel#h2 {{ font-size: 13px; font-weight: 700; background: transparent; }}
 QLabel#dim {{ color: {FG_DIM}; }}
@@ -256,6 +277,7 @@ QFrame#card {{
     border-radius: 6px;
 }}
 /* Labels inside a card sit on the card, not on a darker patch of the window. */
+QFrame#card:focus {{ border: 1px solid {ACCENT}; }}
 QFrame#card QLabel, QFrame#card QCheckBox {{ background: transparent; }}
 QFrame#card QWidget#threshold {{ background: transparent; }}
 QScrollArea#statRow, QWidget#statRowInner {{ background: transparent; border: none; }}

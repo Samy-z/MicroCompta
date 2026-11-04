@@ -29,7 +29,7 @@ for stream in (sys.stdout, sys.stderr):
         pass
 
 from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QToolTip  # noqa: E402
 
 import demo_data  # noqa: E402
 from microcompta.core import clock  # noqa: E402
@@ -47,6 +47,33 @@ def grab(widget, name: str) -> None:
     print(f"  saved {path.relative_to(ROOT)}")
 
 
+def capture(win, app, folder: str = "") -> None:
+    prefix = f"{folder}/" if folder else ""
+    if folder:
+        (SHOTS / folder).mkdir(parents=True, exist_ok=True)
+    for name, panel in (
+        ("01_limits", win.dashboard_panel),
+        ("02_payments", win.ledger_panel),
+        ("03_invoices", win.invoices_panel),
+        ("04_deadlines", win.deadlines_panel),
+        ("05_annual", win.annual_panel),
+        ("06_backup", win.backup_panel),
+    ):
+        win.tabs.setCurrentWidget(panel)
+        if panel is win.invoices_panel:
+            panel.table.select_first()
+        app.processEvents()
+        grab(win, prefix + name)
+
+    win.tabs.setCurrentWidget(win.dashboard_panel)
+    for index, name in enumerate(("07_settings_identity", "08_settings_clients", "09_settings_figures")):
+        win.open_settings(index)
+        app.processEvents()
+        grab(win.settings_dialog, prefix + name)
+    win.settings_dialog.done(0)
+    app.processEvents()
+
+
 def main() -> int:
     clock.today = lambda: demo_data.FAKE_TODAY  # type: ignore[assignment]
     app = QApplication(sys.argv)
@@ -60,26 +87,8 @@ def main() -> int:
     app.processEvents()
 
     def shoot() -> None:
-        print("Capturing panels...")
-        for name, panel in (
-            ("01_limits", win.dashboard_panel),
-            ("02_payments", win.ledger_panel),
-            ("03_invoices", win.invoices_panel),
-            ("04_deadlines", win.deadlines_panel),
-            ("05_annual", win.annual_panel),
-            ("06_backup", win.backup_panel),
-        ):
-            win.tabs.setCurrentWidget(panel)
-            if panel is win.invoices_panel:
-                panel.table.select_first()
-            app.processEvents()
-            grab(win, name)
-
-        win.tabs.setCurrentWidget(win.settings_panel)
-        for index, name in enumerate(("07_settings_identity", "08_settings_clients", "09_settings_figures")):
-            win.settings_panel.tabs.setCurrentIndex(index)
-            app.processEvents()
-            grab(win, name)
+        print("Capturing panels, in French (the default)...")
+        capture(win, app)
 
         win.tabs.setCurrentWidget(win.dashboard_panel)
         win.collapse_dock()
@@ -87,6 +96,24 @@ def main() -> int:
         grab(win, "10_dock_collapsed")
         win.expand_dock()
         app.processEvents()
+
+        card = win.dashboard_panel.stats.cards["projection"]
+        QToolTip.showText(card.mapToGlobal(card.rect().bottomLeft()), card.toolTip(), card)
+        app.processEvents()
+        tips = [w for w in app.topLevelWidgets() if w.objectName() == "qtooltip_label" and w.isVisible()]
+        if tips:
+            grab(tips[0], "11_bubble")
+        QToolTip.hideText()
+
+        print("Switching to English, live...")
+        win.open_settings(0)
+        panel = win.settings_panel
+        panel.language.setCurrentIndex(panel.language.findData("en"))
+        panel.save_profile()
+        app.processEvents()
+        win.settings_dialog.done(0)
+        app.processEvents()
+        capture(win, app, "en")
 
         problems = book.verify()
         print("  integrity:", "intact" if not problems else problems)

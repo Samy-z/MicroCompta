@@ -18,32 +18,40 @@ from ...core import clock
 from ...core.book import Book
 from ...core.errors import MissingFigure
 from ...core.money import fmt_money, round_money, to_decimal
-from ..models import Col
+from ...i18n import fmt_number, fmt_rate, tr
+from ..models import Col, wrap_tip
 from ..widgets.table_view import DataTable
-from .common import Banner, dim_label, from_qdate, guarded, heading, make_date_edit
+from .common import (
+    Banner, bubble, button_box, dim_label, form_row, from_qdate, guarded, heading, make_date_edit,
+)
 
-LIST_COLUMNS = [
-    Col("number", "Number", width=110),
-    Col("kind_label", "Type", width=70),
-    Col("status", "Status", "status", 64),
-    Col("issue_date", "Issued", "date", 84),
-    Col("client_name", "Client", width=170),
-    Col("service_start", "Service from", "date", 88),
-    Col("service_end", "To", "date", 84),
-    Col("total", "Total", "money", 92, currency_key="currency"),
-    Col("fx_rate", "Rate", "rate", 62),
-    Col("total_eur", "EUR value", "eur", 92),
-    Col("link", "Credit note", width=120),
-]
-LINE_COLUMNS = [
-    Col("position", "#", "int", 34),
-    Col("description", "Description", width=320),
-    Col("payment_date", "Paid on", "date", 88),
-    Col("quantity", "Quantity", "qty", 70),
-    Col("unit_price", "Unit price", "money", 90, currency_key="currency"),
-    Col("total", "Total", "money", 90, currency_key="currency"),
-    Col("ledger_seq", "Ledger entry", "int", 80),
-]
+
+def _list_columns() -> list[Col]:
+    return [
+        Col("number", tr("Number"), width=110, tip=tr("Unbroken across all documents and years. A draft has none yet.")),
+        Col("kind_label", tr("Type"), width=74, tip=tr("An invoice, or a credit note cancelling one.")),
+        Col("status", tr("Status"), "status", 70, tip=tr("A draft can change. Once issued, it can't.")),
+        Col("issue_date", tr("Issued"), "date", 84, tip=tr("The date printed on the document.")),
+        Col("client_name", tr("Client"), width=170, tip=tr("Who it is for. An issued document keeps the details it was issued with.")),
+        Col("service_start", tr("Service from"), "date", 88, tip=tr("First day of the service covered.")),
+        Col("service_end", tr("To"), "date", 84, tip=tr("Last day of the service covered.")),
+        Col("total", tr("Total"), "money", 92, currency_key="currency", tip=tr("The total, in the invoice's currency.")),
+        Col("fx_rate", tr("Rate"), "rate", 62, tip=tr("The ECB reference rate printed on the invoice: units of the currency for 1 EUR.")),
+        Col("total_eur", tr("EUR value"), "eur", 92, tip=tr("The euro counter-value printed on the invoice.")),
+        Col("link", tr("Credit note"), width=120, tip=tr("The credit note that cancels this invoice, or the invoice this one cancels.")),
+    ]
+
+
+def _line_columns() -> list[Col]:
+    return [
+        Col("position", "#", "int", 34, tip=tr("Line number on the invoice.")),
+        Col("description", tr("Description"), width=320, tip=tr("What the line says on the invoice.")),
+        Col("payment_date", tr("Paid on"), "date", 88, tip=tr("The date this payment was received.")),
+        Col("quantity", tr("Quantity"), "qty", 70, tip=tr("1 by default. Hours work too: use Edit on a draft.")),
+        Col("unit_price", tr("Unit price"), "money", 90, currency_key="currency", tip=tr("Price per unit, excluding tax.")),
+        Col("total", tr("Total"), "money", 90, currency_key="currency", tip=tr("Quantity times unit price.")),
+        Col("ledger_seq", tr("Ledger entry"), "int", 80, tip=tr("The payment this line comes from, on the Payments tab.")),
+    ]
 
 
 class EditDraftDialog(QDialog):
@@ -55,7 +63,7 @@ class EditDraftDialog(QDialog):
         self.invoice_id = invoice_id
         invoice = book.invoices.get(invoice_id)
         self.lines = book.invoices.lines(invoice_id)
-        self.setWindowTitle("Edit draft")
+        self.setWindowTitle(tr("Edit draft"))
         self.resize(760, 420)
 
         layout = QVBoxLayout(self)
@@ -63,17 +71,26 @@ class EditDraftDialog(QDialog):
         self.start = make_date_edit(invoice["service_start"])
         self.end = make_date_edit(invoice["service_end"])
         self.notes = QLineEdit(invoice["notes"] or "")
-        form.addRow("Service from", self.start)
-        form.addRow("Service to", self.end)
-        form.addRow("Note on the invoice", self.notes)
+        form_row(form, tr("Service from"), self.start, tr("First day of the service covered, printed on the invoice."))
+        form_row(form, tr("Service to"), self.end, tr("Last day of the service covered, printed on the invoice."))
+        form_row(form, tr("Note on the invoice"), self.notes, tr("Optional free text, printed on the invoice."))
         layout.addLayout(form)
         layout.addWidget(dim_label(
-            "Quantity 1 at the paid amount by default. Use hours and an hourly rate if you prefer: "
-            "you'll be warned if a line stops matching its payment."
+            tr("Quantity 1 at the paid amount by default. Use hours and an hourly rate if you "
+               "prefer: you'll be warned if a line stops matching its payment."),
+            tip=tr("The invoice is a summary of what was paid, so each line should add up to its payment."),
         ))
 
         self.table = QTableWidget(len(self.lines), 3)
-        self.table.setHorizontalHeaderLabels(["Description", "Quantity", "Unit price HT"])
+        headers = [
+            (tr("Description"), tr("What the line says on the invoice.")),
+            (tr("Quantity"), tr("1 by default. Hours work too.")),
+            (tr("Unit price HT"), tr("Price per unit, excluding tax.")),
+        ]
+        for column, (title, tip) in enumerate(headers):
+            item = QTableWidgetItem(title)
+            item.setToolTip(wrap_tip(tip))
+            self.table.setHorizontalHeaderItem(column, item)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -82,12 +99,10 @@ class EditDraftDialog(QDialog):
             quantity = f"{Decimal(line['quantity']):f}".rstrip("0").rstrip(".")
             self.table.setItem(row, 1, QTableWidgetItem(quantity))
             self.table.setItem(row, 2, QTableWidgetItem(f"{Decimal(line['unit_price']):.2f}"))
+        bubble(self.table, tr("Double-click a cell to change it."), tr("Invoice lines"))
         layout.addWidget(self.table, 1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._save)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        layout.addWidget(button_box(QDialogButtonBox.Save | QDialogButtonBox.Cancel, self._save, self.reject))
 
     def _save(self) -> None:
         new_lines = []
@@ -108,7 +123,7 @@ class EditDraftDialog(QDialog):
             )
             return True
 
-        if guarded(self, "Draft not saved", apply):
+        if guarded(self, tr("Draft not saved"), apply):
             self.accept()
 
 
@@ -117,33 +132,46 @@ class IssueDialog(QDialog):
 
     def __init__(self, book: Book, invoice: dict[str, Any], parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Issue final invoice")
+        self.setWindowTitle(tr("Issue final invoice"))
         self.resize(480, 0)
         self.currency = invoice["currency"]
         self.total = sum((Decimal(l["total"]) for l in book.invoices.lines(invoice["id"])), Decimal(0))
 
         layout = QVBoxLayout(self)
-        layout.addWidget(heading(f"{invoice['client_name']}  ·  {fmt_money(self.total, self.currency)}", "h2"))
+        layout.addWidget(heading(
+            f"{invoice['client_name']}  ·  {fmt_money(self.total, self.currency)}",
+            tr("The client and the total of this invoice."), "h2",
+        ))
         form = QFormLayout()
         today = clock.today()
         self.issue_date = make_date_edit(today)
-        form.addRow("Issue date", self.issue_date)
+        form_row(form, tr("Issue date"), self.issue_date, tr(
+            "The date printed on the invoice. It can't be earlier than the last document issued."
+        ))
         self.rate = QLineEdit()
-        self.rate.setPlaceholderText("1.0823")
-        self.rate.setToolTip(f"{self.currency} for 1 EUR on the ECB's reference rate.")
+        self.rate.setPlaceholderText(fmt_rate(Decimal("1.0823")))
         self.rate.textChanged.connect(self._update_value)
         self.rate_date = make_date_edit(today)
-        self.euro_value = QLineEdit(readOnly=True)
+        self.euro_value = QLineEdit()
+        self.euro_value.setReadOnly(True)
         if self.currency != "EUR":
-            form.addRow(f"ECB rate ({self.currency} per 1 EUR)", self.rate)
-            form.addRow("Rate published on", self.rate_date)
-            form.addRow("Euro value printed", self.euro_value)
+            form_row(form, tr("ECB rate ({currency} per 1 EUR)", currency=self.currency), self.rate, tr(
+                "The ECB's reference rate for the issue date, from its website. Printed on the invoice."
+            ))
+            form_row(form, tr("Rate published on"), self.rate_date, tr(
+                "The date of that rate. The ECB publishes nothing at weekends: use the last rate "
+                "and its date."
+            ))
+            form_row(form, tr("Euro value printed"), self.euro_value, tr(
+                "The total divided by the rate. Printed on the invoice as its counter-value."
+            ))
         layout.addLayout(form)
         if self.currency != "EUR":
             layout.addWidget(dim_label(
-                "economie.gouv.fr: the invoice shows the amount, its euro counter-value and the rate "
-                "applied, using the ECB's rate of the day. No rate is published at weekends, so "
-                "use the last one and its date. The app has no network access to look this up."
+                tr("economie.gouv.fr: the invoice shows the amount, its euro counter-value and the "
+                   "rate applied, using the ECB's rate of the day. No rate is published at weekends, "
+                   "so use the last one and its date. The app has no network access to look this up."),
+                tip=tr("Page \"Comment facturer dans une monnaie étrangère ?\" on economie.gouv.fr."),
             ))
         warnings = book.invoices.issue_warnings(invoice["id"])
         try:
@@ -153,17 +181,19 @@ class IssueDialog(QDialog):
         except MissingFigure as exc:
             warnings.append(str(exc))
         if warnings:
-            layout.addWidget(Banner("warn", "\n".join(warnings)))
+            layout.addWidget(Banner("warn", "\n".join(warnings), tip=tr(
+                "Worth a second look. These don't stop the invoice being issued."
+            )))
         layout.addWidget(dim_label(
-            "Once issued this can't change or be deleted, and it takes the next number. "
-            "A correction is a credit note."
+            tr("Once issued this can't change or be deleted, and it takes the next number. A "
+               "correction is a credit note."),
+            tip=tr("French invoices need an unbroken chronological numbering."),
         ))
-        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
-        issue = QPushButton("Issue invoice")
+        buttons = button_box(QDialogButtonBox.Cancel, self.accept, self.reject)
+        issue = QPushButton(tr("Issue invoice"))
         issue.setObjectName("primary")
+        bubble(issue, tr("Takes the next number, freezes the invoice, saves the PDF and queues it for Drive."))
         buttons.addButton(issue, QDialogButtonBox.AcceptRole)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
     def _update_value(self, *_args: Any) -> None:
@@ -177,18 +207,20 @@ class IssueDialog(QDialog):
 class CreditDialog(QDialog):
     def __init__(self, number: str, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle(f"Credit note for {number}")
+        self.setWindowTitle(tr("Credit note for {number}", number=number))
         form = QFormLayout(self)
-        form.addRow(dim_label("This cancels the whole invoice, at its original exchange rate. "
-                              "Its payments can then be invoiced again."))
+        form.addRow(dim_label(
+            tr("This cancels the whole invoice, at its original exchange rate. Its payments can then "
+               "be invoiced again."),
+            tip=tr("An issued invoice can't change, so a credit note is how it gets corrected."),
+        ))
         self.reason = QLineEdit()
-        form.addRow("Reason", self.reason)
+        form_row(form, tr("Reason"), self.reason, tr("Required. Printed on the credit note."))
         self.issue_date = make_date_edit(clock.today())
-        form.addRow("Issue date", self.issue_date)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        form_row(form, tr("Issue date"), self.issue_date, tr(
+            "The date printed on the credit note. It can't be earlier than the last document issued."
+        ))
+        form.addRow(button_box(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self.accept, self.reject))
 
 
 class InvoicesPanel(QWidget):
@@ -204,34 +236,55 @@ class InvoicesPanel(QWidget):
         layout.setSpacing(7)
 
         top = QHBoxLayout()
-        top.addWidget(heading("Invoices"))
+        top.addWidget(heading(tr("Invoices"), tr(
+            "Monthly summary invoices drafted from the payments received. Issued documents can't change."
+        )))
         top.addStretch(1)
-        top.addWidget(QLabel("New monthly draft:"))
+        new_label = QLabel(tr("New monthly draft:"))
+        bubble(new_label, tr("Pick a client and a month, then create a draft from that month's payments."))
+        top.addWidget(new_label)
         self.client = QComboBox()
         self.client.setMinimumWidth(170)
         self.client.currentIndexChanged.connect(self._fill_months)
+        bubble(self.client, tr("The client to invoice."), tr("Client"))
         top.addWidget(self.client)
         self.month = QComboBox()
         self.month.setMinimumWidth(170)
+        bubble(self.month, tr("Months with payments not yet on an invoice, with how many and their total."), tr("Month"))
         top.addWidget(self.month)
-        self.draft_button = QPushButton("Create draft")
+        self.draft_button = QPushButton(tr("Create draft"))
         self.draft_button.setObjectName("primary")
+        bubble(self.draft_button, tr("Makes a draft with one line per payment. A draft can be changed or deleted."))
         self.draft_button.clicked.connect(lambda _c=False: self.create_draft())
         top.addWidget(self.draft_button)
         layout.addLayout(top)
 
-        self.alert = Banner("bad")
+        self.alert = Banner("bad", tip=tr(
+            "A payment on an issued invoice was reversed, so the invoice no longer matches the ledger."
+        ))
         layout.addWidget(self.alert)
 
         splitter = QSplitter(Qt.Vertical)
         splitter.setChildrenCollapsible(False)
-        self.table = DataTable(LIST_COLUMNS, key="id")
-        self.edit_button = self.table.add_button("Edit…", self.edit_selected)
-        self.preview_button = self.table.add_button("Preview", self.preview_selected)
-        self.delete_button = self.table.add_button("Delete draft", self.delete_selected, danger=True)
-        self.issue_button = self.table.add_button("Issue…", self.issue_selected, primary=True)
-        self.open_button = self.table.add_button("Open PDF", self.open_selected)
-        self.credit_button = self.table.add_button("Credit note…", self.credit_selected, danger=True)
+        self.table = DataTable(_list_columns(), key="id")
+        self.edit_button = self.table.add_button(tr("Edit…"), self.edit_selected, tip=tr(
+            "Change a draft's dates, note and lines."
+        ))
+        self.preview_button = self.table.add_button(tr("Preview"), self.preview_selected, tip=tr(
+            "Opens the draft as a PDF marked BROUILLON. Works without a SIREN."
+        ))
+        self.delete_button = self.table.add_button(tr("Delete draft"), self.delete_selected, danger=True, tip=tr(
+            "Removes the draft. Its payments can be drafted again. Issued documents can't be deleted."
+        ))
+        self.issue_button = self.table.add_button(tr("Issue…"), self.issue_selected, primary=True, tip=tr(
+            "Makes the draft final, with the next number. Needs a valid SIREN and the ECB rate."
+        ))
+        self.open_button = self.table.add_button(tr("Open PDF"), self.open_selected, tip=tr(
+            "Opens the issued document."
+        ))
+        self.credit_button = self.table.add_button(tr("Credit note…"), self.credit_selected, danger=True, tip=tr(
+            "Cancels the whole issued invoice with a new document, and frees its payments."
+        ))
         self.table.row_selected.connect(self._on_selected)
         splitter.addWidget(self.table)
 
@@ -239,10 +292,13 @@ class InvoicesPanel(QWidget):
         lower_lay = QVBoxLayout(lower)
         lower_lay.setContentsMargins(0, 4, 0, 0)
         lower_lay.setSpacing(5)
-        lower_lay.addWidget(heading("Lines", "h2"))
-        self.lines = DataTable(LINE_COLUMNS, toolbar=False)
+        lower_lay.addWidget(heading(tr("Lines"), tr("The lines of the selected invoice."), "h2"))
+        self.lines = DataTable(_line_columns(), toolbar=False)
         lower_lay.addWidget(self.lines, 1)
-        self.value_note = dim_label("")
+        self.value_note = dim_label("", tip=tr(
+            "An invoice's euro value uses the ECB rate on its issue date. Turnover uses each "
+            "payment's own rate on the date received, so the two can differ."
+        ))
         lower_lay.addWidget(self.value_note)
         splitter.addWidget(lower)
         splitter.setSizes([360, 260])
@@ -265,11 +321,11 @@ class InvoicesPanel(QWidget):
         rows = []
         for row in self.book.invoices.list():
             row = dict(row)
-            row["kind_label"] = "Credit note" if row["kind"] == "credit_note" else "Invoice"
+            row["kind_label"] = tr("Credit note") if row["kind"] == "credit_note" else tr("Invoice")
             if row["credits_number"]:
-                row["link"] = f"Cancels {row['credits_number']}"
+                row["link"] = tr("Cancels {number}", number=row["credits_number"])
             elif row["credited_by"]:
-                row["link"] = f"Cancelled by {row['credited_by']}"
+                row["link"] = tr("Cancelled by {number}", number=row["credited_by"])
                 row["_dim"] = True
             else:
                 row["link"] = ""
@@ -279,8 +335,8 @@ class InvoicesPanel(QWidget):
 
         stale = self.book.invoices.stale()
         self.alert.show_text(
-            "A payment on these invoices was reversed, so each needs a credit note: "
-            + ", ".join(s["number"] for s in stale) + "." if stale else ""
+            tr("A payment on these invoices was reversed, so each needs a credit note: {numbers}.",
+               numbers=", ".join(s["number"] for s in stale)) if stale else ""
         )
 
     def _fill_months(self, *_args: Any) -> None:
@@ -301,11 +357,12 @@ class InvoicesPanel(QWidget):
                 total = sum((Decimal(p["amount_gross"]) for p in payments), Decimal(0))
                 currency = payments[0]["currency"]
                 self.month.addItem(
-                    f"{year}-{month:02d}  ({len(payments)}, {fmt_money(total, currency)})", (year, month)
+                    f"{year}-{month:02d}  ({fmt_number(len(payments), 0)}, {fmt_money(total, currency)})",
+                    (year, month),
                 )
         self.draft_button.setEnabled(self.month.count() > 0)
         if self.month.count() == 0:
-            self.month.addItem("Nothing left to invoice", None)
+            self.month.addItem(tr("Nothing left to invoice"), None)
 
     def _on_selected(self, row: dict[str, Any] | None) -> None:
         is_draft = bool(row and row["status"] == "draft")
@@ -336,9 +393,10 @@ class InvoicesPanel(QWidget):
                 entry = self.book.ledger.get(int(line["ledger_seq"]))
                 if entry:
                     total += Decimal(entry["eur_gross"])
-        return (
-            f"On the invoice: {fmt_money(row['total_eur'])}, at the ECB rate on the issue date. In the "
-            f"ledger: {fmt_money(total)}, at each payment's rate. Turnover uses the ledger."
+        return tr(
+            "On the invoice: {invoice}, at the ECB rate on the issue date. In the ledger: {ledger}, "
+            "at each payment's rate. Turnover uses the ledger.",
+            invoice=fmt_money(row["total_eur"]), ledger=fmt_money(total),
         )
 
     # -- actions ------------------------------------------------------------
@@ -347,11 +405,11 @@ class InvoicesPanel(QWidget):
         period = self.month.currentData()
         if client_id is None or period is None:
             return None
-        invoice_id = guarded(self, "No draft created", lambda: self.book.invoices.create_monthly_draft(
+        invoice_id = guarded(self, tr("No draft created"), lambda: self.book.invoices.create_monthly_draft(
             client_id, period[0], period[1]
         ))
         if invoice_id is not None:
-            self.status.emit("Draft created. Check it, then issue it when you have a SIREN.")
+            self.status.emit(tr("Draft created. Check it, then issue it when you have a SIREN."))
             self.changed.emit()
             self.table.select_key(invoice_id)
         return invoice_id
@@ -370,7 +428,7 @@ class InvoicesPanel(QWidget):
         if row is None:
             return
         target = self.book.documents.tmp_dir() / f"apercu_{row['id']}_{clock.now():%H%M%S}.pdf"
-        path = guarded(self, "Preview failed", lambda: self.book.invoices.preview(row["id"], target))
+        path = guarded(self, tr("Preview failed"), lambda: self.book.invoices.preview(row["id"], target))
         if path is not None:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
@@ -378,9 +436,9 @@ class InvoicesPanel(QWidget):
         row = self._selected()
         if row is None:
             return
-        reply = QMessageBox.question(self, "Delete draft?", "Its payments can then be drafted again.")
+        reply = QMessageBox.question(self, tr("Delete draft?"), tr("Its payments can then be drafted again."))
         if reply == QMessageBox.Yes and guarded(
-            self, "Not deleted", lambda: self.book.invoices.delete_draft(row["id"]) or True
+            self, tr("Not deleted"), lambda: self.book.invoices.delete_draft(row["id"]) or True
         ):
             self.changed.emit()
 
@@ -401,11 +459,11 @@ class InvoicesPanel(QWidget):
 
     def issue(self, invoice_id: int, issue_date: date, fx_rate: Any = None,
               fx_rate_date: date | None = None) -> str | None:
-        number = guarded(self, "Invoice not issued", lambda: self.book.invoices.issue(
+        number = guarded(self, tr("Invoice not issued"), lambda: self.book.invoices.issue(
             invoice_id, issue_date, fx_rate=fx_rate, fx_rate_date=fx_rate_date,
         ))
         if number is not None:
-            self.status.emit(f"{number} issued, saved and queued for Drive.")
+            self.status.emit(tr("{number} issued, saved and queued for Drive.", number=number))
             self.changed.emit()
             self.table.select_key(invoice_id)
         return number
@@ -423,9 +481,9 @@ class InvoicesPanel(QWidget):
         dialog = CreditDialog(row["number"], self)
         if dialog.exec() != QDialog.Accepted:
             return
-        number = guarded(self, "No credit note issued", lambda: self.book.invoices.credit_note(
+        number = guarded(self, tr("No credit note issued"), lambda: self.book.invoices.credit_note(
             row["id"], dialog.reason.text(), from_qdate(dialog.issue_date.date())
         ))
         if number is not None:
-            self.status.emit(f"{number} issued, cancelling {row['number']}.")
+            self.status.emit(tr("{number} issued, cancelling {original}.", number=number, original=row["number"]))
             self.changed.emit()

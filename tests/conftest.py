@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if os.name == "nt":
     os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
 
+from microcompta import i18n  # noqa: E402
 from microcompta.backup.drive_client import (  # noqa: E402
     AuthRequired, PermanentDriveError, RemoteFile, TransientDriveError,
 )
@@ -29,6 +30,14 @@ FAKE_SIREN = "123456782"  # passes the check digit; fake
 @pytest.fixture(autouse=True)
 def _isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MICROCOMPTA_DATA_DIR", str(tmp_path / "appdata"))
+
+
+@pytest.fixture(autouse=True)
+def _english_by_default():
+    """Tests read the source text. The French ones set the language themselves."""
+    i18n.set_language("en")
+    yield
+    i18n.set_language("en")
 
 
 @pytest.fixture

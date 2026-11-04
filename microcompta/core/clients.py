@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..i18n import N_, tr
 from . import clock
 from .db import Database
 from .errors import ValidationError
 
 # Shown wherever the flag is off. The exclusion is an inference, not a confirmed rule.
-EXCLUSION_LABEL = "probably; SIE to confirm"
+EXCLUSION_LABEL = N_("probably; SIE to confirm")
 
 _FIELDS = ("name", "address", "country", "tax_id", "email", "currency",
            "taxed_in_france", "vat_note", "active")
@@ -24,7 +25,7 @@ class Clients:
             vat_note: str = "", active: bool = True) -> int:
         name = name.strip()
         if not name:
-            raise ValidationError("A client needs a name.")
+            raise ValidationError(tr("A client needs a name."))
         client_id = self.db.next_id("clients")
         self.db.execute(
             "INSERT INTO clients (id, name, address, country, tax_id, email, currency, "
@@ -38,9 +39,11 @@ class Clients:
     def update(self, client_id: int, **changes: Any) -> None:
         unknown = set(changes) - set(_FIELDS)
         if unknown:
-            raise ValidationError(f"Unknown client field(s): {', '.join(sorted(unknown))}")
+            raise ValidationError(
+                tr("Unknown client field(s): {fields}", fields=", ".join(sorted(unknown)))
+            )
         if "name" in changes and not str(changes["name"]).strip():
-            raise ValidationError("A client needs a name.")
+            raise ValidationError(tr("A client needs a name."))
         for key, value in changes.items():
             self.db.execute(f"UPDATE clients SET {key} = ? WHERE id = ?", [value, client_id])
 

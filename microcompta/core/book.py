@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..backup.queue import UploadQueue
 from ..config import documents_dir
+from ..i18n import tr
 from .clients import Clients
 from .db import Database
 from .deadlines import DeadlineBook
@@ -47,7 +48,7 @@ class Book:
         """Keep a receipt with a ledger entry. The entry itself doesn't change."""
         entry = self.ledger.get(seq)
         if entry is None:
-            raise ValueError(f"Entry {seq} does not exist.")
+            raise ValueError(tr("Entry {seq} does not exist.", seq=seq))
         source = Path(source)
         return self.documents.add_file(
             source, kind="receipt", year=entry["received_on"].year,

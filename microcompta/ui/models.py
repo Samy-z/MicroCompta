@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -10,19 +11,33 @@ from typing import Any
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
 from PySide6.QtGui import QColor
 
-from ..core.money import fmt_money
+from ..i18n import fmt_date, fmt_datetime, fmt_money, fmt_number, fmt_percent, fmt_rate, tr
 from .theme import BAD, FG, FG_DIM, STATUS_COLOURS
 
 _NUMERIC = ("eur", "money", "rate", "pct", "int", "bytes", "days", "qty")
 
 
+# Above this length a bubble wraps, at a width that keeps its lines comfortable to read.
+_ONE_LINE_CHARS = 60
+_BUBBLE_WIDTH_PX = 340
+
+
+def wrap_tip(text: str) -> str:
+    """Rich text, because Qt only wraps a tooltip that is rich text, and left to itself it
+    picks a narrow column: 135 px for a two-sentence bubble (measured)."""
+    body = html.escape(text, quote=False).replace("\n", "<br>")
+    if len(text) <= _ONE_LINE_CHARS and "\n" not in text:
+        return f"<qt><span style='white-space:nowrap'>{body}</span></qt>"
+    return f"<qt><table width='{_BUBBLE_WIDTH_PX}'><tr><td>{body}</td></tr></table></qt>"
+
+
 @dataclass(frozen=True)
 class Col:
-    """Presentation spec for one column."""
+    """Presentation spec for one column. Build these at runtime, so they follow the language."""
 
     key: str
     title: str
-    fmt: str = "text"     # text|eur|money|rate|pct|date|datetime|int|bytes|days|status|bool
+    fmt: str = "text"     # text|eur|money|rate|pct|date|datetime|int|bytes|days|status|bool|qty
     width: int = 100
     tip: str = ""
     currency_key: str = ""
@@ -31,7 +46,7 @@ class Col:
 
 def local_time(value: datetime) -> str:
     """Stored in UTC, shown in local time."""
-    return value.replace(tzinfo=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+    return fmt_datetime(value.replace(tzinfo=timezone.utc).astimezone())
 
 
 def fmt_value(value: Any, fmt: str, currency: str = "EUR") -> str:
@@ -42,29 +57,33 @@ def fmt_value(value: Any, fmt: str, currency: str = "EUR") -> str:
     if fmt == "money":
         return fmt_money(Decimal(value), currency)
     if fmt == "rate":
-        text = f"{Decimal(value):.6f}".rstrip("0")
-        return text + "0" if text.endswith(".") else text
+        return fmt_rate(value)
     if fmt == "pct":
-        return f"{Decimal(value) * 100:.1f}%"
+        return fmt_percent(value)
     if fmt == "date":
-        return value.isoformat() if isinstance(value, (date, datetime)) else str(value)
+        return fmt_date(value) if isinstance(value, (date, datetime)) else str(value)
     if fmt == "datetime":
         return local_time(value) if isinstance(value, datetime) else str(value)
     if fmt == "qty":
-        return f"{Decimal(value):f}".rstrip("0").rstrip(".")
+        decimals = len(f"{Decimal(value):f}".rstrip("0").partition(".")[2])
+        return fmt_number(value, decimals)
     if fmt == "int":
-        return f"{int(value):,}"
+        return fmt_number(int(value), 0)
     if fmt == "days":
         n = int(value)
-        return "today" if n == 0 else (f"{n} d" if n > 0 else f"{-n} d late")
+        if n == 0:
+            return tr("today")
+        return tr("{days} d", days=n) if n > 0 else tr("{days} d late", days=-n)
     if fmt == "bytes":
         size = float(value)
-        for unit in ("B", "KB", "MB", "GB"):
-            if size < 1024 or unit == "GB":
-                return f"{size:,.0f} {unit}" if unit == "B" else f"{size:,.1f} {unit}"
+        for unit in (tr("B"), tr("KB"), tr("MB"), tr("GB")):
+            if size < 1024 or unit == tr("GB"):
+                return f"{fmt_number(size, 0 if unit == tr('B') else 1)} {unit}"
             size /= 1024
     if fmt == "bool":
-        return "yes" if value else "—"
+        return tr("yes") if value else "—"
+    if fmt == "status":
+        return tr(str(value))
     return str(value)
 
 
@@ -111,7 +130,7 @@ class RowsModel(QAbstractTableModel):
             return fmt_value(value, spec.fmt, currency)
         if role == Qt.ToolTipRole:
             text = fmt_value(value, spec.fmt, currency)
-            return f"{text}\n{spec.tip}" if spec.tip else text
+            return wrap_tip(f"{text}\n{spec.tip}" if spec.tip else text)
         if role == Qt.TextAlignmentRole:
             side = Qt.AlignRight if spec.fmt in _NUMERIC else Qt.AlignLeft
             return int(Qt.AlignVCenter | side)
@@ -138,7 +157,7 @@ class RowsModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             return spec.title
         if role == Qt.ToolTipRole:
-            return spec.tip or spec.title
+            return wrap_tip(spec.tip or spec.title)
         return None
 
 

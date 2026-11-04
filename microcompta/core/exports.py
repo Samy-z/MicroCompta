@@ -18,6 +18,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from ..i18n import translate
 from . import clock
 from .ledger_policy import TurnoverPolicy, counted_eur
 from .money import ZERO, fmt_amount_fr, fmt_date_fr, fmt_rate_fr
@@ -75,14 +76,14 @@ class Exports:
                     e["currency"],
                     _csv_amount(e["amount_gross"]),
                     _csv_rate(e["fx_rate"]),
-                    e["fx_source"],
+                    translate(e["fx_source"], "fr"),
                     _csv_amount(e["eur_gross"]),
                     _csv_amount(e["fee_amount"]),
                     e["fee_currency"],
                     _csv_amount(e["fee_eur"]),
                     _csv_amount(e["net_credited"]),
                     e["net_currency"],
-                    e["payment_method"],
+                    translate(e["payment_method"], "fr"),
                     e["provider_ref"] or "",
                     e["linked_invoice"],
                     "" if e["reverses_seq"] is None else str(e["reverses_seq"]),
@@ -204,7 +205,7 @@ class Exports:
                     p(fmt_amount_fr(e["eur_gross"]), right),
                     p(fmt_amount_fr(e["fee_eur"]), right),
                     p(fmt_amount_fr(e["net_credited"], e["net_currency"]), right),
-                    p(e["payment_method"]), p(e["provider_ref"]),
+                    p(translate(e["payment_method"], "fr")), p(e["provider_ref"]),
                     Paragraph(escape(e["linked_invoice"]).replace(", ", "<br/>"), body),
                 ])
             marks.append(len(rows))

@@ -13,6 +13,7 @@ from typing import Any
 
 import duckdb
 
+from ..i18n import tr
 from . import clock
 
 # What the records are. The queue, folder cache and reminder log change on their own
@@ -73,7 +74,7 @@ class Snapshots:
             doc_ids = [
                 self.book.documents.add_file(
                     archive, kind="snapshot", year=when.year, name=f"microcompta_{stamp}.duckdb.zip",
-                    title=f"Database snapshot {when:%Y-%m-%d %H:%M} UTC", move=True,
+                    title=f"Sauvegarde de la base {when:%Y-%m-%d %H:%M} UTC", move=True,
                 )
             ]
         except BaseException:
@@ -95,8 +96,9 @@ class Snapshots:
                 copied = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
                 live = self.book.db.scalar(f"SELECT count(*) FROM {table}")
                 if copied != live:
-                    raise RuntimeError(
-                        f"Snapshot check failed: {table} has {copied} rows, expected {live}."
-                    )
+                    raise RuntimeError(tr(
+                        "Snapshot check failed: {table} has {copied} rows, expected {live}.",
+                        table=table, copied=copied, live=live,
+                    ))
         finally:
             con.close()

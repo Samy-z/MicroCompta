@@ -18,6 +18,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
+from ..i18n import fmt_date, tr
 from . import clock
 from .chain import GENESIS, chain_hash
 from .clients import Clients
@@ -80,12 +81,13 @@ class Invoices:
         """A summary invoice from that month's payments, one line per payment."""
         client = self.clients.get(client_id)
         if client is None:
-            raise ValidationError("Choose a client.")
+            raise ValidationError(tr("Choose a client."))
         payments = self.uninvoiced_payments(client_id, year, month)
         if not payments:
-            raise ValidationError(
-                f"No payment to invoice for {client['name']} in {year}-{month:02d}."
-            )
+            raise ValidationError(tr(
+                "No payment to invoice for {client} in {year}-{month}.",
+                client=client["name"], year=year, month=f"{month:02d}",
+            ))
         last_day = calendar.monthrange(year, month)[1]
         with self.db.transaction():
             invoice_id = self.db.next_id("invoices")
@@ -109,13 +111,13 @@ class Invoices:
 
     def _insert_lines(self, invoice_id: int, lines: list[dict[str, Any]]) -> None:
         for position, line in enumerate(lines, start=1):
-            quantity = to_decimal(line["quantity"], "Quantity")
-            unit_price = round_money(to_decimal(line["unit_price"], "Unit price"))
+            quantity = to_decimal(line["quantity"], tr("Quantity"))
+            unit_price = round_money(to_decimal(line["unit_price"], tr("Unit price")))
             description = str(line["description"]).strip()
             if not description:
-                raise ValidationError(f"Line {position} needs a description.")
+                raise ValidationError(tr("Line {position} needs a description.", position=position))
             if quantity == 0:
-                raise ValidationError(f"Line {position} needs a quantity.")
+                raise ValidationError(tr("Line {position} needs a quantity.", position=position))
             self.db.execute(
                 "INSERT INTO invoice_lines (id, invoice_id, position, description, quantity, "
                 "unit_price, total, ledger_seq, payment_date) "
@@ -128,12 +130,12 @@ class Invoices:
     def _require_draft(self, invoice_id: int) -> dict[str, Any]:
         invoice = self.get(invoice_id)
         if invoice is None:
-            raise ValidationError(f"Invoice {invoice_id} does not exist.")
+            raise ValidationError(tr("Invoice {invoice} does not exist.", invoice=invoice_id))
         if invoice["status"] != "draft":
-            raise ImmutableError(
-                f"Invoice {invoice['number']} has been issued and cannot change. "
-                "Correct it with a credit note."
-            )
+            raise ImmutableError(tr(
+                "Invoice {number} has been issued and cannot change. Correct it with a credit note.",
+                number=invoice["number"],
+            ))
         return invoice
 
     def update_draft(self, invoice_id: int, *, service_start: date | None = None,
@@ -226,52 +228,54 @@ class Invoices:
 
         if not siren_is_valid(profile.siren):
             reasons.append(
-                "No valid SIREN in Settings. Drafts are fine, but a final invoice needs one."
+                tr("No valid SIREN in Settings. Drafts are fine, but a final invoice needs one.")
                 if not profile.siren.strip() else
-                f"The SIREN in Settings ('{profile.siren}') is not valid: 9 digits, check digit."
+                tr("The SIREN in Settings ('{siren}') is not valid: 9 digits, check digit.",
+                   siren=profile.siren)
             )
         if not profile.legal_name.strip():
-            reasons.append("Your name is missing in Settings.")
+            reasons.append(tr("Your name is missing in Settings."))
         if not profile.address.strip():
-            reasons.append("Your address is missing in Settings.")
+            reasons.append(tr("Your address is missing in Settings."))
         if not profile.vat_mention.strip():
-            reasons.append("The VAT mention is empty in Settings.")
+            reasons.append(tr("The VAT mention is empty in Settings."))
         if not profile.late_rate_text.strip():
-            reasons.append("The late-payment rate text is empty in Settings.")
+            reasons.append(tr("The late-payment rate text is empty in Settings."))
         if client is None or not client["name"].strip():
-            reasons.append("The client is missing.")
+            reasons.append(tr("The client is missing."))
         elif not (client["address"] or "").strip():
-            reasons.append(f"The address of {client['name']} is missing.")
+            reasons.append(tr("The address of {client} is missing.", client=client["name"]))
         if not lines:
-            reasons.append("The invoice has no lines.")
+            reasons.append(tr("The invoice has no lines."))
         elif sum(Decimal(l["total"]) for l in lines) == 0:
-            reasons.append("The invoice total is zero.")
+            reasons.append(tr("The invoice total is zero."))
         if invoice and (invoice["service_start"] is None or invoice["service_end"] is None):
-            reasons.append("The service dates are missing.")
+            reasons.append(tr("The service dates are missing."))
         elif invoice and invoice["service_start"] > invoice["service_end"]:
-            reasons.append("The service period ends before it starts.")
+            reasons.append(tr("The service period ends before it starts."))
 
         if issue_date > clock.today():
-            reasons.append("The issue date cannot be in the future.")
+            reasons.append(tr("The issue date cannot be in the future."))
         last = self._last_issue_date()
         if last is not None and issue_date < last:
-            reasons.append(
-                f"Numbering must stay chronological: the last document was issued on {last}."
-            )
+            reasons.append(tr(
+                "Numbering must stay chronological: the last document was issued on {date}.",
+                date=fmt_date(last),
+            ))
         if invoice and invoice["currency"] != "EUR":
             try:
-                rate = to_decimal(fx_rate, "Exchange rate")
+                rate = to_decimal(fx_rate, tr("Exchange rate"))
             except ValidationError:
                 rate = Decimal(0)
             if rate <= 0:
-                reasons.append(
+                reasons.append(tr(
                     "A foreign-currency invoice must show its exchange rate: enter the ECB "
                     "reference rate for the issue date."
-                )
+                ))
             if fx_rate_date is None:
-                reasons.append("Enter the date of the exchange rate.")
+                reasons.append(tr("Enter the date of the exchange rate."))
             elif fx_rate_date > issue_date:
-                reasons.append("The exchange rate cannot be dated after the issue date.")
+                reasons.append(tr("The exchange rate cannot be dated after the issue date."))
 
         reversed_lines = [
             l["position"] for l in lines
@@ -280,10 +284,10 @@ class Invoices:
             )
         ]
         if invoice and invoice["kind"] == "invoice" and reversed_lines:
-            reasons.append(
-                "These lines refer to a reversed payment: "
-                + ", ".join(str(p) for p in reversed_lines) + "."
-            )
+            reasons.append(tr(
+                "These lines refer to a reversed payment: {lines}.",
+                lines=", ".join(str(p) for p in reversed_lines),
+            ))
         return reasons
 
     def issue_warnings(self, invoice_id: int) -> list[str]:
@@ -294,10 +298,11 @@ class Invoices:
                 continue
             entry = self.db.row("SELECT amount_gross FROM ledger WHERE seq = ?", [line["ledger_seq"]])
             if entry and Decimal(entry["amount_gross"]) != Decimal(line["total"]):
-                warnings.append(
-                    f"Line {line['position']} totals {line['total']} but payment "
-                    f"{line['ledger_seq']} was {entry['amount_gross']}."
-                )
+                warnings.append(tr(
+                    "Line {position} totals {total} but payment {entry} was {amount}.",
+                    position=line["position"], total=line["total"], entry=line["ledger_seq"],
+                    amount=entry["amount_gross"],
+                ))
         return warnings
 
     def _snapshot(self, invoice: dict[str, Any], lines: list[dict[str, Any]], number: str,
@@ -366,7 +371,7 @@ class Invoices:
         invoice = self._require_draft(invoice_id)
         rate = None
         if fx_rate not in (None, ""):
-            rate = to_decimal(fx_rate, "Exchange rate")
+            rate = to_decimal(fx_rate, tr("Exchange rate"))
             if rate <= 0:
                 rate = None
         snapshot = self._snapshot(
@@ -388,7 +393,7 @@ class Invoices:
 
         profile = load_profile(self.db)
         is_euro = invoice["currency"] == "EUR"
-        rate = Decimal(1) if is_euro else to_decimal(fx_rate, "Exchange rate")
+        rate = Decimal(1) if is_euro else to_decimal(fx_rate, tr("Exchange rate"))
         lines = self.lines(invoice_id)
 
         credits_number = None
@@ -468,16 +473,18 @@ class Invoices:
         """Cancel an issued invoice in full. Its payments can then be invoiced again."""
         reason = reason.strip()
         if not reason:
-            raise ValidationError("A credit note needs a reason.")
+            raise ValidationError(tr("A credit note needs a reason."))
         original = self.get(invoice_id)
         if original is None or original["status"] != "issued":
-            raise ValidationError("Only an issued invoice can be credited.")
+            raise ValidationError(tr("Only an issued invoice can be credited."))
         if original["kind"] != "invoice":
-            raise ValidationError("A credit note cannot itself be credited.")
+            raise ValidationError(tr("A credit note cannot itself be credited."))
         if self.db.scalar(
             "SELECT count(*) FROM invoices WHERE credited_invoice_id = ?", [invoice_id]
         ):
-            raise ImmutableError(f"Invoice {original['number']} already has a credit note.")
+            raise ImmutableError(
+                tr("Invoice {number} already has a credit note.", number=original["number"])
+            )
 
         lines = self.lines(invoice_id)
         snapshot = json.loads(self.db.scalar(
@@ -521,24 +528,24 @@ class Invoices:
         for row in self.register():
             seq = int(row["seq"])
             if seq != expected:
-                problems.append(f"Invoice numbering has a gap: {expected} is missing.")
+                problems.append(tr("Invoice numbering has a gap: {seq} is missing.", seq=expected))
                 expected = seq
             if row["prev_hash"] != prev_hash:
-                problems.append(f"{row['number']} does not follow the document before it.")
+                problems.append(tr("{number} does not follow the document before it.", number=row["number"]))
             if chain_hash(row["prev_hash"], _register_payload(row)) != row["entry_hash"]:
-                problems.append(f"{row['number']} was changed after it was issued.")
+                problems.append(tr("{number} was changed after it was issued.", number=row["number"]))
             if last_date is not None and row["issue_date"] < last_date:
-                problems.append(f"{row['number']} is dated before the document it follows.")
+                problems.append(tr("{number} is dated before the document it follows.", number=row["number"]))
             doc = self.documents.get(int(row["document_id"]))
             if doc is None:
-                problems.append(f"{row['number']} has no document on record.")
+                problems.append(tr("{number} has no document on record.", number=row["number"]))
             elif doc["sha256"] != row["pdf_sha256"]:
-                problems.append(f"The document on record for {row['number']} is not the one issued.")
+                problems.append(tr("The document on record for {number} is not the one issued.", number=row["number"]))
             live = self.db.scalar(
                 "SELECT status FROM invoices WHERE id = ?", [row["invoice_id"]]
             )
             if live != "issued":
-                problems.append(f"{row['number']} is registered but no longer marked as issued.")
+                problems.append(tr("{number} is registered but no longer marked as issued.", number=row["number"]))
             prev_hash = row["entry_hash"]
             last_date = row["issue_date"]
             expected += 1

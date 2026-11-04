@@ -25,6 +25,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from .config import APP_ICO, APP_NAME, LOGO_ICON, WINDOWS_APP_ID, logs_dir  # noqa: E402
 from .core.book import Book  # noqa: E402
+from .i18n import DEFAULT_LANGUAGE, tr  # noqa: E402
+from .ui.language import apply_language  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
 from .ui.single_instance import SingleInstance  # noqa: E402
 
@@ -71,9 +73,9 @@ def _excepthook(kind: Any, value: Any, tb: Any) -> None:
     )
     if QApplication.instance() is not None:
         QMessageBox.critical(
-            None, f"{APP_NAME}: unexpected error",
-            f"{value}\n\nYour records are safe: each one is committed when it's made. "
-            "The details are in the log file.",
+            None, tr("{app}: unexpected error", app=APP_NAME),
+            tr("{error}\n\nYour records are safe: each one is committed when it's made. "
+               "The details are in the log file.", error=value),
         )
 
 
@@ -108,6 +110,8 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName(APP_NAME)
     # Closing the window can mean "keep running in the tray".
     app.setQuitOnLastWindowClosed(False)
+    # Until the records are open and the saved choice can be read.
+    apply_language(DEFAULT_LANGUAGE)
 
     icon_path = APP_ICO if APP_ICO.exists() else LOGO_ICON
     if icon_path.exists():
@@ -122,7 +126,10 @@ def main(argv: list[str] | None = None) -> int:
         book = Book()
     except Exception as exc:  # noqa: BLE001 - no console under pythonw, so say it here
         logging.getLogger(__name__).exception("Could not open the database")
-        QMessageBox.critical(None, f"{APP_NAME} cannot start", f"Could not open the records.\n\n{exc}")
+        QMessageBox.critical(
+            None, tr("{app} cannot start", app=APP_NAME),
+            tr("Could not open the records.\n\n{error}", error=exc),
+        )
         return 1
 
     window = MainWindow(book)

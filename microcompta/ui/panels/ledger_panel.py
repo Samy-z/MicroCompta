@@ -15,57 +15,69 @@ from PySide6.QtWidgets import (
 
 from ...core import clock
 from ...core.book import Book
-from ...core.ledger_policy import BASIS_LABELS, FEE_POINTER, FX_LABELS, UNCONFIRMED
+from ...core.errors import MissingFigure
+from ...core.ledger_policy import BASIS_LABELS, FEE_POINTER, FX_LABELS, UNCONFIRMED, counted_eur
 from ...core.money import fmt_money
-from ..models import Col
+from ...i18n import fmt_date, tr
+from ..models import Col, fmt_value
 from ..widgets.table_view import DataTable
 from .common import (
-    Banner, StatRow, fill_years, from_qdate, guarded, heading, make_date_edit, year_combo,
+    Banner, StatRow, bubble, button_box, fill_years, form_row, from_qdate, guarded, heading,
+    make_date_edit, year_combo,
 )
 
-COLUMNS = [
-    Col("seq", "N°", "int", 44),
-    Col("received_on", "Received", "date", 84),
-    Col("client_name", "Client (origin)", width=125),
-    Col("description", "Description", width=150),
-    Col("amount_gross", "Gross", "money", 76, currency_key="currency"),
-    Col("fx_rate", "Rate", "rate", 56, tip="Units of the currency for 1 EUR"),
-    Col("eur_gross", "EUR gross", "eur", 76),
-    Col("fee_amount", "Fee", "money", 58, currency_key="fee_currency"),
-    Col("net_credited", "Net credited", "money", 78, currency_key="net_currency"),
-    Col("counted", "Counted", "eur", 76, tip="What this entry adds to turnover under the current setting"),
-    Col("set_aside", "Set aside", "eur", 66),
-    Col("payment_method", "Method", width=54),
-    Col("provider_ref", "Reference", width=80),
-    Col("linked_invoice", "Invoice", width=92),
-    Col("receipts", "Receipts", "int", 54),
-    Col("note", "Note", width=180),
-]
+
+def _columns() -> list[Col]:
+    return [
+        Col("seq", tr("N°"), "int", 44, tip=tr("Entry number, in the order recorded. It never changes.")),
+        Col("received_on", tr("Received"), "date", 84, tip=tr("The day the money arrived. Turnover counts on this date.")),
+        Col("client_name", tr("Client (origin)"), width=125, tip=tr("Who paid, as recorded at the time.")),
+        Col("description", tr("Description"), width=150, tip=tr("What the payment was for.")),
+        Col("amount_gross", tr("Gross"), "money", 76, currency_key="currency",
+            tip=tr("What the client paid, in the client's currency, before any fee.")),
+        Col("fx_rate", tr("Rate"), "rate", 56, tip=tr("Units of the currency for 1 EUR, on this entry.")),
+        Col("eur_gross", tr("EUR gross"), "eur", 76, tip=tr("Gross divided by the rate.")),
+        Col("fee_amount", tr("Fee"), "money", 58, currency_key="fee_currency",
+            tip=tr("What the provider kept, in the currency recorded.")),
+        Col("net_credited", tr("Net credited"), "money", 88, currency_key="net_currency",
+            tip=tr("What reached your account.")),
+        Col("counted", tr("Counted"), "eur", 76,
+            tip=tr("What this entry adds to turnover under the current setting.")),
+        Col("set_aside", tr("Set aside"), "eur", 112,
+            tip=tr("Contributions on this payment, at the rate in force on its date.")),
+        Col("method_shown", tr("Method"), width=62, tip=tr("How the money arrived.")),
+        Col("provider_ref", tr("Reference"), width=80, tip=tr("The provider's own reference.")),
+        Col("linked_invoice", tr("Invoice"), width=92,
+            tip=tr("The invoice this payment is on, and any credit note that cancelled it.")),
+        Col("receipts", tr("Receipts"), "int", 62, tip=tr("How many files are attached to this entry.")),
+        Col("note", tr("Note"), width=180, tip=tr("Shows when an entry was reversed, or what a reversal cancels.")),
+    ]
 
 
 class ReverseDialog(QDialog):
     def __init__(self, entry: dict[str, Any], parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle(f"Reverse entry {entry['seq']}")
+        self.setWindowTitle(tr("Reverse entry {seq}", seq=entry["seq"]))
         form = QFormLayout(self)
-        form.addRow(heading(f"{entry['received_on']}  ·  {entry['client_name']}", "h2"))
-        form.addRow(
-            "Amount", QLineEdit(f"{entry['amount_gross']} {entry['currency']} "
-                                f"({fmt_money(entry['eur_gross'])})", readOnly=True)
+        form.addRow(heading(
+            f"{fmt_date(entry['received_on'])}  ·  {entry['client_name']}",
+            tr("The entry this cancels."), "h2",
+        ))
+        amount = QLineEdit(
+            f"{fmt_value(entry['amount_gross'], 'money', entry['currency'])} "
+            f"({fmt_money(entry['eur_gross'])})"
         )
+        amount.setReadOnly(True)
+        form_row(form, tr("Amount"), amount, tr("The amount that will be cancelled by a negative entry."))
         self.reason = QLineEdit()
-        self.reason.setPlaceholderText("Why this entry is being cancelled")
-        form.addRow("Reason", self.reason)
+        self.reason.setPlaceholderText(tr("Why this entry is being cancelled"))
+        form_row(form, tr("Reason"), self.reason, tr("Required. It stays with the reversal in the ledger and its exports."))
         self.on = make_date_edit(entry["received_on"])
-        self.on.setToolTip(
-            "Keep the original date to fix a mistake: it cancels in the same period. "
-            "Use the real date for a refund."
-        )
-        form.addRow("Reversal date", self.on)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        form_row(form, tr("Reversal date"), self.on, tr(
+            "Keep the original date to fix a mistake: it cancels in the same period. Use the real "
+            "date for a refund."
+        ))
+        form.addRow(button_box(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self.accept, self.reject))
 
 
 class LedgerPanel(QWidget):
@@ -81,31 +93,47 @@ class LedgerPanel(QWidget):
         layout.setSpacing(7)
 
         top = QHBoxLayout()
-        top.addWidget(heading("Payments ledger"))
+        top.addWidget(heading(tr("Payments ledger"), tr(
+            "The livre des recettes: one entry per payment received. Entries can't be edited."
+        )))
         self.year = year_combo([], clock.today().year)
         self.year.currentIndexChanged.connect(lambda _i: self.reload())
         top.addWidget(self.year)
-        self.policy_banner = Banner("warn")
+        self.policy_banner = Banner("warn", tip=tr(
+            "How turnover is counted. The choice is in Settings, and each entry keeps every value, "
+            "so changing it recomputes without touching an entry."
+        ))
         top.addWidget(self.policy_banner, 1)
         layout.addLayout(top)
 
         self.totals = StatRow([
-            ("q1", "T1 total", ""), ("q2", "T2 total", ""), ("q3", "T3 total", ""),
-            ("q4", "T4 total", ""), ("year", "Year total", "Turnover under the current setting."),
-            ("gross", "EUR gross", "Before fees, at each entry's rate."),
-            ("fees", "Provider fees", "In euros."),
-            ("set_aside", "Set aside", "Contributions on the year's turnover."),
+            ("q1", tr("Q1 total"), tr("Turnover received from January to March.")),
+            ("q2", tr("Q2 total"), tr("Turnover received from April to June.")),
+            ("q3", tr("Q3 total"), tr("Turnover received from July to September.")),
+            ("q4", tr("Q4 total"), tr("Turnover received from October to December.")),
+            ("year", tr("Year total"), tr("Turnover for the year, under the current setting.")),
+            ("gross", tr("EUR gross"), tr("Everything received, before fees, at each entry's rate.")),
+            ("fees", tr("Provider fees"), tr("What the providers kept, in euros.")),
+            ("set_aside", tr("Set aside"), tr("Contributions on the year's turnover.")),
         ])
         layout.addWidget(self.totals)
 
-        self.table = DataTable(COLUMNS, key="seq")
+        self.table = DataTable(_columns(), key="seq")
         self.reverse_button = self.table.add_button(
-            "Reverse entry…", self.reverse_selected, danger=True,
-            tip="Entries can't be edited. This adds a reversing entry with a reason.",
+            tr("Reverse entry…"), self.reverse_selected, danger=True,
+            tip=tr("Entries can't be edited. This adds a reversing entry with a reason."),
         )
-        self.attach_button = self.table.add_button("Attach receipt…", self.attach_receipt)
-        self.table.add_button("Export CSV", self.export_csv)
-        self.table.add_button("Export PDF", self.export_pdf)
+        self.attach_button = self.table.add_button(
+            tr("Attach receipt…"), self.attach_receipt,
+            tip=tr("Keeps a copy of a file with the selected entry and queues it for Google Drive."),
+        )
+        self.table.add_button(tr("Export CSV"), self.export_csv, tip=tr(
+            "Saves this year's ledger as a spreadsheet file, in French, and queues it for Drive."
+        ))
+        self.table.add_button(tr("Export PDF"), self.export_pdf, tip=tr(
+            "Saves this year's livre des recettes as a PDF, in French, with totals every 3 months, "
+            "and queues it for Drive."
+        ))
         self.table.row_selected.connect(self._on_selected)
         layout.addWidget(self.table, 1)
         self._on_selected(None)
@@ -124,27 +152,26 @@ class LedgerPanel(QWidget):
         profile = self.book.profile()
         policy = profile.policy
 
-        self.policy_banner.show_text(
-            f"Turnover counted: {BASIS_LABELS[policy.basis]} · {FX_LABELS[policy.fx]}. "
-            f"USD rate and fees: {UNCONFIRMED}. {FEE_POINTER}"
-        )
-
-        from ...core.errors import MissingFigure
-        from ...core.ledger_policy import counted_eur
+        self.policy_banner.show_text(tr(
+            "Turnover counted: {basis} · {rate}. USD rate and fees: {label}. {pointer}",
+            basis=tr(BASIS_LABELS[policy.basis]), rate=tr(FX_LABELS[policy.fx]),
+            label=tr(UNCONFIRMED), pointer=tr(FEE_POINTER),
+        ))
 
         rows = []
         for entry in self.book.ledger.entries(current):
             row = dict(entry)
             row["counted"] = counted_eur(entry, policy)
+            row["method_shown"] = tr(entry["payment_method"])
             try:
                 row["set_aside"] = self.book.limits.set_aside_for(entry, profile)
             except MissingFigure:
                 row["set_aside"] = None
             if entry["kind"] == "reversal":
-                row["note"] = f"Reverses entry {entry['reverses_seq']}: {entry['reason']}"
+                row["note"] = tr("Reverses entry {seq}: {reason}", seq=entry["reverses_seq"], reason=entry["reason"])
                 row["_dim"] = True
             elif entry["is_reversed"]:
-                row["note"] = "Reversed"
+                row["note"] = tr("Reversed")
                 row["_dim"] = True
             else:
                 row["note"] = ""
@@ -171,9 +198,9 @@ class LedgerPanel(QWidget):
         self.reverse(int(row["seq"]), dialog.reason.text(), from_qdate(dialog.on.date()))
 
     def reverse(self, seq: int, reason: str, on: date | None = None) -> int | None:
-        new_seq = guarded(self, "Not reversed", lambda: self.book.ledger.reverse(seq, reason, on))
+        new_seq = guarded(self, tr("Not reversed"), lambda: self.book.ledger.reverse(seq, reason, on))
         if new_seq is not None:
-            self.status.emit(f"Entry {seq} reversed by entry {new_seq}.")
+            self.status.emit(tr("Entry {seq} reversed by entry {new}.", seq=seq, new=new_seq))
             self.changed.emit()
         return new_seq
 
@@ -181,10 +208,10 @@ class LedgerPanel(QWidget):
         row = self.table.current_row()
         if row is None:
             return
-        path, _ = QFileDialog.getOpenFileName(self, f"Attach a receipt to entry {row['seq']}")
-        if path and guarded(self, "Receipt not attached",
+        path, _filter = QFileDialog.getOpenFileName(self, tr("Attach a receipt to entry {seq}", seq=row["seq"]))
+        if path and guarded(self, tr("Receipt not attached"),
                             lambda: self.book.attach_receipt(int(row["seq"]), path)) is not None:
-            self.status.emit(f"Receipt attached to entry {row['seq']} and queued for Drive.")
+            self.status.emit(tr("Receipt attached to entry {seq} and queued for Drive.", seq=row["seq"]))
             self.changed.emit()
 
     def export_csv(self, ask: bool = True) -> int | None:
@@ -194,20 +221,23 @@ class LedgerPanel(QWidget):
         return self._export("PDF", lambda: self.book.exports.ledger_pdf(self._selected_year()), ask)
 
     def _export(self, label: str, action: Any, ask: bool) -> int | None:
-        doc_id = guarded(self, "Export failed", action)
+        doc_id = guarded(self, tr("Export failed"), action)
         if doc_id is None:
             return None
         doc = self.book.documents.get(doc_id)
         path = self.book.documents.path_of(doc)
-        self.status.emit(f"{label} export saved and queued for Drive: {doc['rel_path']}")
+        self.status.emit(tr("{kind} export saved and queued for Drive: {path}", kind=label, path=doc["rel_path"]))
         self.changed.emit()
         if ask:
             box = QMessageBox(self)
-            box.setWindowTitle("Export saved")
-            box.setText(f"Saved to:\n{path}\n\nAlso queued for Google Drive.")
-            open_button = box.addButton("Open folder", QMessageBox.ActionRole)
+            box.setWindowTitle(tr("Export saved"))
+            box.setText(tr("Saved to:\n{path}\n\nAlso queued for Google Drive.", path=path))
+            open_button = box.addButton(tr("Open folder"), QMessageBox.ActionRole)
             box.addButton(QMessageBox.Close)
             box.exec()
             if box.clickedButton() is open_button:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
         return doc_id
+
+
+__all__ = ["LedgerPanel", "ReverseDialog", "bubble"]

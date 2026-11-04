@@ -270,6 +270,8 @@ def test_git_ignores_the_records_and_the_secrets(path):
 
 @pytest.mark.parametrize("path", [
     "microcompta/data/figures_seed.json",   # an unanchored "data/" once hid this one
+    "microcompta/data/i18n/fr.json",
+    "assets/gear.svg",
     "microcompta/core/ledger.py",
     "assets/MicroCompta.ico",
     "README.md",
