@@ -32,9 +32,10 @@ from microcompta import config, i18n  # noqa: E402
 from microcompta.ui.main_window import MainWindow  # noqa: E402
 from microcompta.ui.models import wrap_tip  # noqa: E402
 from microcompta.ui.panels import common  # noqa: E402
-from microcompta.ui.panels.common import Chip, StatCard, bubble  # noqa: E402
+from microcompta.ui.panels.common import Chip, StatCard, bubble, from_qdate  # noqa: E402
 from microcompta.ui.panels.invoices_panel import CreditDialog, EditDraftDialog, IssueDialog  # noqa: E402
 from microcompta.ui.panels.ledger_panel import ReverseDialog  # noqa: E402
+from microcompta.ui.panels.purchases_panel import PurchaseDialog, ReversePurchaseDialog  # noqa: E402
 from microcompta.ui.panels.settings_panel import ClientDialog, FigureDialog  # noqa: E402
 from microcompta.ui.widgets.table_view import DataTable  # noqa: E402
 from microcompta.ui.widgets.threshold_bar import ThresholdBar  # noqa: E402
@@ -458,7 +459,7 @@ def test_quit_takes_a_final_snapshot_and_tries_to_upload(book, demo, qapp, tmp_p
     wait_for_upload(win, qapp)
     QTest.qWait(30)
     qapp.processEvents()
-    assert len(drive.files) == 5   # two invoices, the snapshot and two CSVs
+    assert len(drive.files) == 6   # two invoices, the snapshot and three CSVs
     assert {f["name"].rsplit(".", 1)[-1] for f in drive.files.values()} == {"pdf", "zip", "csv"}
 
 
@@ -803,13 +804,222 @@ def test_installing_the_client_file_from_the_backup_tab(book, qapp, tmp_path, wa
     win._finish_quit(None)
 
 
+# -- expenses: the purchases register ------------------------------------------
+def fill_purchase(dialog: PurchaseDialog) -> None:
+    dialog.supplier.setText("Logiciel Exemple")
+    dialog.description.setText("Abonnement mensuel, novembre")
+    dialog.category.setCurrentIndex(dialog.category.findData("Software and subscriptions"))
+    dialog.amount.setText("21,60")
+    dialog.method.setCurrentIndex(dialog.method.findData("Bank card"))
+    dialog.reference.setText("EX-2026-11")
+
+
+def test_expenses_is_a_tab_next_to_the_payments(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    assert win.tabs.tabText(win.tabs.indexOf(win.purchases_panel)) == "Dépenses"
+    assert win.tabs.indexOf(win.purchases_panel) == win.tabs.indexOf(win.ledger_panel) + 1
+    win._finish_quit(None)
+
+
+def test_the_tab_opens_with_the_rule_a_beginner_needs(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    win.tabs.setCurrentWidget(win.purchases_panel)
+    qapp.processEvents()
+    text = win.purchases_panel.rule_banner.label.text()
+    assert win.purchases_panel.rule_banner.isVisible()
+    assert "ne se déduisent pas" in text
+    assert "ne se déclare" in text
+    win._finish_quit(None)
+
+
+def test_a_purchase_is_recorded_from_the_dialog_and_reaches_the_table(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    panel = win.purchases_panel
+    before = len(book.purchases.entries())
+    dialog = PurchaseDialog(book, panel)
+    fill_purchase(dialog)
+    dialog.share.setValue(50)
+    dialog.accept()
+    assert dialog.result() == QDialog.Accepted
+    panel.recorded(dialog.seq)
+    qapp.processEvents()
+    row = book.purchases.get(dialog.seq)
+    assert row["amount_eur"] == D("21.60")
+    assert row["pro_share"] == D("0.5")
+    assert row["payment_method"] == "Bank card"
+    assert len(panel.table.model.rows) == before + 1
+    assert panel.table.model.rows[0]["seq"] == dialog.seq      # newest first
+    assert "recorded" in win.status_label.text()
+    win._finish_quit(None)
+
+
+def test_a_refused_purchase_keeps_the_dialog_open_with_what_was_typed(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    before = len(book.purchases.entries())
+    dialog = PurchaseDialog(book, win.purchases_panel)
+    fill_purchase(dialog)
+    dialog.amount.setText("0")
+    dialog.show()
+    dialog.accept()
+    assert dialog.isVisible()
+    assert dialog.seq is None
+    assert dialog.supplier.text() == "Logiciel Exemple"
+    assert any("positive" in w for w in warnings)
+    assert len(book.purchases.entries()) == before
+    dialog.done(0)
+    win._finish_quit(None)
+
+
+def test_a_copy_is_for_this_months_bill(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    source = next(e for e in book.purchases.entries() if e["category"] == "Transport and travel")
+    dialog = PurchaseDialog(book, win.purchases_panel, template=dict(source))
+    assert dialog.supplier.text() == source["supplier"]
+    assert dialog.amount.text() == "90.00"
+    assert dialog.share.value() == 50
+    assert dialog.method.currentData() == "Direct debit"
+    assert from_qdate(dialog.paid_on.date()) == demo_data.FAKE_TODAY
+    win._finish_quit(None)
+
+
+def test_a_copy_doesnt_keep_the_old_document_number(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    source = next(e for e in book.purchases.entries() if e["piece_ref"])
+    dialog = PurchaseDialog(book, win.purchases_panel, template=dict(source))
+    assert dialog.reference.text() == ""                        # a new bill has a new number
+    win._finish_quit(None)
+
+
+def test_a_copy_shows_its_amount_the_french_way_and_can_be_saved(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    source = next(e for e in book.purchases.entries() if e["category"] == "Fixed asset")
+    dialog = PurchaseDialog(book, win.purchases_panel, template=dict(source))
+    assert dialog.amount.text().replace("\u00a0", " ").replace("\u202f", " ") == "1 200,00"
+    dialog.accept()
+    assert not warnings
+    assert book.purchases.get(dialog.seq)["amount_eur"] == D("1200.00")
+    win._finish_quit(None)
+
+
+def test_recording_a_purchase_in_french_stores_the_keys(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    dialog = PurchaseDialog(book, win.purchases_panel)
+    fill_purchase(dialog)
+    assert dialog.method.currentText() == "Carte bancaire"
+    assert dialog.category.currentText() == "Logiciels et abonnements"
+    dialog.accept()
+    row = book.purchases.get(dialog.seq)
+    assert row["payment_method"] == "Bank card"
+    assert row["category"] == "Software and subscriptions"
+    win._finish_quit(None)
+
+
+def test_buttons_follow_what_is_selected(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    panel = win.purchases_panel
+    win.tabs.setCurrentWidget(panel)
+    panel.table.select_first()
+    qapp.processEvents()
+    assert panel.reverse_button.isEnabled()
+    assert panel.copy_button.isEnabled()
+    seq = int(panel.table.current_row()["seq"])
+    new = panel.reverse(seq, "Erreur")
+    qapp.processEvents()
+    panel.table.select_key(new)
+    qapp.processEvents()
+    assert not panel.reverse_button.isEnabled()                 # a reversal can't be reversed
+    assert not panel.copy_button.isEnabled()
+    assert panel.attach_button.isEnabled()
+    panel.table.select_key(seq)
+    qapp.processEvents()
+    assert not panel.reverse_button.isEnabled()                 # already reversed
+    assert panel.copy_button.isEnabled()
+    win._finish_quit(None)
+
+
+def test_the_numbers_on_the_tab_add_up(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    cards = win.purchases_panel.stats.cards
+    assert cards["paid"].value.text() == "€1,333.20"            # 21.60 x 2 + 90 + 1,200
+    assert cards["pro"].value.text() == "€1,288.20"             # the pass counts for half
+    assert cards["assets"].value.text() == "€1,200.00"
+    comparison = book.regime_comparison(2026)
+    assert comparison["purchases"]["charges"] == D("88.20")
+    assert comparison["real_charges"] == D("88.20") + comparison["social"]
+    assert "34%" in cards["allowance"].toolTip()
+    assert "€500" in cards["assets"].toolTip()
+    win._finish_quit(None)
+
+
+def test_a_share_of_half_is_stored_as_a_half(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = PurchaseDialog(book, win.purchases_panel)
+    fill_purchase(dialog)
+    dialog.share.setValue(50)
+    dialog.accept()
+    assert not warnings
+    assert book.purchases.get(dialog.seq)["pro_share"] == D("0.5")
+    win._finish_quit(None)
+
+
+def test_the_comparison_note_says_what_it_leaves_out(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    note = win.purchases_panel.note.text()
+    assert "impôt sur le revenu" in note
+    assert "expert-comptable" in note
+    assert "versement libératoire" not in note
+    profile = book.profile()
+    profile.vl_enabled = True
+    book.save_profile(profile)
+    win.purchases_panel.reload()
+    assert "versement libératoire" in win.purchases_panel.note.text()
+    win._finish_quit(None)
+
+
+def test_recording_a_purchase_changes_no_other_tab(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    ytd = win.dashboard_panel.stats.cards["ytd"].value.text()
+    aside = win.dashboard_panel.stats.cards["set_aside"].value.text()
+    dialog = PurchaseDialog(book, win.purchases_panel)
+    fill_purchase(dialog)
+    dialog.amount.setText("5000")
+    dialog.accept()
+    win.purchases_panel.recorded(dialog.seq)
+    qapp.processEvents()
+    assert win.dashboard_panel.stats.cards["ytd"].value.text() == ytd
+    assert win.dashboard_panel.stats.cards["set_aside"].value.text() == aside
+    win._finish_quit(None)
+
+
+def test_attaching_a_document_shows_in_the_table_and_the_backup(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    source = tmp_path / "facture.pdf"
+    source.write_bytes(b"facture")
+    seq = book.purchases.entries()[0]["seq"]
+    assert win.purchases_panel.attach(int(seq), str(source)) is not None
+    qapp.processEvents()
+    row = next(r for r in win.purchases_panel.table.model.rows if r["seq"] == seq)
+    assert row["receipts"] == 1
+    assert "Justificatif joint" in win.status_label.text()
+    win._finish_quit(None)
+
+
+def test_the_register_exports_from_the_tab(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    for export in (win.purchases_panel.export_csv, win.purchases_panel.export_pdf):
+        doc = book.documents.get(export(ask=False))
+        assert "registre_achats_2026" in doc["rel_path"]
+        assert book.documents.path_of(doc).stat().st_size > 0
+    win._finish_quit(None)
+
+
 # -- settings, behind the gear -------------------------------------------------
 def test_settings_is_no_longer_a_tab(book, demo, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
     assert win.tabs.indexOf(win.settings_panel) == -1
     titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
     assert "Settings" not in titles
-    assert win.tabs.count() == 6
+    assert win.tabs.count() == 7
     win._finish_quit(None)
 
 
@@ -881,7 +1091,7 @@ def test_closing_without_changes_asks_nothing(book, demo, qapp, tmp_path, monkey
 def test_a_new_install_opens_in_french(book, qapp, tmp_path):
     win = MainWindow(book, client_factory=lambda: None, tokens=FakeTokens("no_client", tmp_path))
     assert i18n.current_language() == "fr"
-    assert win.tabs.tabText(0) == "Plafonds"
+    assert win.tabs.tabText(0) == "Seuils"
     assert win.help_button.text() == "Aide"
     assert win.settings_panel.language.findData("fr") >= 0
     win.settings_panel.reload()
@@ -899,7 +1109,7 @@ def test_qt_own_words_follow_the_language(book, demo, qapp, tmp_path):
 
 def test_switching_language_rebuilds_everything_and_loses_nothing(book, demo, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
-    assert win.tabs.tabText(1) == "Encaissements"
+    assert win.tabs.tabText(1) == "Recettes"
     win.tabs.setCurrentWidget(win.invoices_panel)
     entries = len(book.ledger.entries())
 
@@ -925,7 +1135,7 @@ def test_switching_language_rebuilds_everything_and_loses_nothing(book, demo, qa
 
 def test_switching_back_and_forth_keeps_working(book, demo, qapp, tmp_path, monkeypatch):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
-    for code, label in (("en", "Limits"), ("fr", "Plafonds"), ("en", "Limits")):
+    for code, label in (("en", "Limits"), ("fr", "Seuils"), ("en", "Limits")):
         win.open_settings(0)
         panel = win.settings_panel
         panel.language.setCurrentIndex(panel.language.findData(code))
@@ -1002,6 +1212,9 @@ def _every_dialog(book: Any, win: MainWindow, demo: dict[str, Any]) -> list[QWid
     figure = book.figures.rows()[0]
     return [
         ReverseDialog(entry, win),
+        PurchaseDialog(book, win),
+        PurchaseDialog(book, win, template=dict(book.purchases.entries()[0])),
+        ReversePurchaseDialog(dict(book.purchases.entries()[0]), win),
         EditDraftDialog(book, demo["invoices"][9], win),
         IssueDialog(book, invoice, win),
         CreditDialog("FA-2026-0001", win),

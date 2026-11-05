@@ -7,7 +7,7 @@ the dashboard says is what the tests check.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -78,6 +78,12 @@ def taxable_base(turnover: Decimal, allowance_rate: Decimal, allowance_min: Deci
         return ZERO
     allowance = max(turnover * allowance_rate, allowance_min)
     return round_money(max(turnover - allowance, Decimal(0)))
+
+
+def flat_allowance(turnover: Decimal, allowance_rate: Decimal, allowance_min: Decimal) -> Decimal:
+    """What the flat allowance takes off turnover: the other side of taxable_base."""
+    base = taxable_base(turnover, allowance_rate, allowance_min)
+    return max(round_money(turnover) - base, ZERO)
 
 
 @dataclass(frozen=True)
@@ -392,6 +398,16 @@ class Limits:
             rate_text = " / ".join(fmt_percent(r) for r in rates.values())
             rows.append(PeriodRow(label, first, last, turnover, rate_text, set_aside, len(in_span)))
         return rows
+
+    def social_contributions(self, year: int) -> Decimal:
+        """Contributions on the year's turnover without any versement libératoire: that part
+        is income tax, not a social charge."""
+        profile = replace(self.profile_loader(), vl_enabled=False)
+        total = ZERO
+        for e in self.ledger.entries(year):
+            info = contribution_rate(e["received_on"], profile, self.figures)
+            total += round_money(counted_eur(e, profile.policy) * info.rate)
+        return total
 
     def set_aside_for(self, entry: dict[str, Any], profile: Profile) -> Decimal:
         """What to put aside for one payment."""

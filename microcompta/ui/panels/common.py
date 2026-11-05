@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Callable, Iterable
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCalendarWidget, QComboBox, QDateEdit, QDialogButtonBox, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLayout,
@@ -260,6 +261,27 @@ def fill_years(combo: QComboBox, years: Iterable[int], current: int) -> None:
         combo.addItem(str(year), year)
     combo.setCurrentIndex(combo.findData(current))
     combo.blockSignals(False)
+
+
+def run_export(panel: Any, label: str, action: Callable[[], int], ask: bool) -> int | None:
+    """Run an export for a panel with a book and status and changed signals, then say where it went."""
+    doc_id = guarded(panel, tr("Export failed"), action)
+    if doc_id is None:
+        return None
+    doc = panel.book.documents.get(doc_id)
+    path = panel.book.documents.path_of(doc)
+    panel.status.emit(tr("{kind} export saved and queued for Drive: {path}", kind=label, path=doc["rel_path"]))
+    panel.changed.emit()
+    if ask:
+        box = QMessageBox(panel)
+        box.setWindowTitle(tr("Export saved"))
+        box.setText(tr("Saved to:\n{path}\n\nAlso queued for Google Drive.", path=path))
+        open_button = box.addButton(tr("Open folder"), QMessageBox.ActionRole)
+        box.addButton(QMessageBox.Close)
+        box.exec()
+        if box.clickedButton() is open_button:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+    return doc_id
 
 
 def guarded(parent: QWidget, title: str, action: Callable[[], Any]) -> Any:

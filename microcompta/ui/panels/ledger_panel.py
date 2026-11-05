@@ -6,11 +6,9 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from PySide6.QtCore import QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox,
-    QVBoxLayout, QWidget,
+    QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget,
 )
 
 from ...core import clock
@@ -23,7 +21,7 @@ from ..models import Col, fmt_value
 from ..widgets.table_view import DataTable
 from .common import (
     Banner, StatRow, bubble, button_box, fill_years, form_row, from_qdate, guarded, heading,
-    make_date_edit, year_combo,
+    make_date_edit, run_export, year_combo,
 )
 
 
@@ -43,13 +41,13 @@ def _columns() -> list[Col]:
             tip=tr("What reached your account.")),
         Col("counted", tr("Counted"), "eur", 76,
             tip=tr("What this entry adds to turnover under the current setting.")),
-        Col("set_aside", tr("Set aside"), "eur", 112,
+        Col("set_aside", tr("Set aside"), "eur", 126,
             tip=tr("Contributions on this payment, at the rate in force on its date.")),
         Col("method_shown", tr("Method"), width=62, tip=tr("How the money arrived.")),
         Col("provider_ref", tr("Reference"), width=80, tip=tr("The provider's own reference.")),
         Col("linked_invoice", tr("Invoice"), width=92,
             tip=tr("The invoice this payment is on, and any credit note that cancelled it.")),
-        Col("receipts", tr("Receipts"), "int", 62, tip=tr("How many files are attached to this entry.")),
+        Col("receipts", tr("Receipts"), "int", 78, tip=tr("How many files are attached to this entry.")),
         Col("note", tr("Note"), width=180, tip=tr("Shows when an entry was reversed, or what a reversal cancels.")),
     ]
 
@@ -215,29 +213,10 @@ class LedgerPanel(QWidget):
             self.changed.emit()
 
     def export_csv(self, ask: bool = True) -> int | None:
-        return self._export("CSV", lambda: self.book.exports.ledger_csv(self._selected_year()), ask)
+        return run_export(self, "CSV", lambda: self.book.exports.ledger_csv(self._selected_year()), ask)
 
     def export_pdf(self, ask: bool = True) -> int | None:
-        return self._export("PDF", lambda: self.book.exports.ledger_pdf(self._selected_year()), ask)
-
-    def _export(self, label: str, action: Any, ask: bool) -> int | None:
-        doc_id = guarded(self, tr("Export failed"), action)
-        if doc_id is None:
-            return None
-        doc = self.book.documents.get(doc_id)
-        path = self.book.documents.path_of(doc)
-        self.status.emit(tr("{kind} export saved and queued for Drive: {path}", kind=label, path=doc["rel_path"]))
-        self.changed.emit()
-        if ask:
-            box = QMessageBox(self)
-            box.setWindowTitle(tr("Export saved"))
-            box.setText(tr("Saved to:\n{path}\n\nAlso queued for Google Drive.", path=path))
-            open_button = box.addButton(tr("Open folder"), QMessageBox.ActionRole)
-            box.addButton(QMessageBox.Close)
-            box.exec()
-            if box.clickedButton() is open_button:
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
-        return doc_id
+        return run_export(self, "PDF", lambda: self.book.exports.ledger_pdf(self._selected_year()), ask)
 
 
 __all__ = ["LedgerPanel", "ReverseDialog", "bubble"]

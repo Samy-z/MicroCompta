@@ -143,7 +143,7 @@ def test_english_is_the_source_text_untouched():
 
 def test_french_translates_and_formats():
     i18n.set_language("fr")
-    assert i18n.tr("Limits") == "Plafonds"
+    assert i18n.tr("Limits") == "Seuils"
     assert i18n.tr("Entry {seq} does not exist.", seq=3) == "L'écriture 3 n'existe pas."
 
 
@@ -214,13 +214,50 @@ def test_limit_cards_and_deadlines_are_translated(book, identity, client_id, pin
     book.save_profile(identity)
     i18n.set_language("fr")
     card = book.limits.report(2027).ceiling
-    assert card.title == "Plafond micro"
-    assert "Sous le plafond" in card.headline
+    assert card.title == "Seuil du régime micro"
+    assert "Sous le seuil" in card.headline
     assert "70 087" in card.details[0]
     titles = [i["title"] for i in book.deadlines.items()]
     assert any(t.startswith("Déclaration de chiffre d'affaires") for t in titles)
     labels = [p.label for p in book.limits.report(2027).periods]
     assert labels[0] == "mars 2027"
+
+
+# -- the words the owner will repeat to URSSAF and to other entrepreneurs ------
+@pytest.mark.parametrize("key, official", [
+    ("Limits", "Seuils"),                                     # F23267, F21746
+    ("VAT franchise", "Franchise en base de TVA"),            # F21746
+    ("VAT franchise, services: base limit", "Franchise en base de TVA, services : seuil de franchise"),
+    ("VAT franchise, services: upper limit", "Franchise en base de TVA, services : seuil majoré"),
+    ("Set aside", "Cotisations sociales"),                    # F36232
+    ("Taxable base", "Bénéfice imposable"),                   # DGFiP leaflet, March 2026
+    ("Income tax allowance: minimum", "Abattement forfaitaire : minimum"),   # impots.gouv.fr
+    ("Credit note", "Facture d'avoir"),                       # F23208
+    ("Receipts", "Justificatifs"),                            # F23266
+    ("Purchases register", "Registre des achats"),            # F23266, DGFiP leaflet
+    ("Payments ledger", "Livre des recettes"),                # F23266
+    ("BNC, non-regulated (SSI)", "Activité libérale non réglementée (BNC)"),   # F36232
+    ("BIC, services", "Prestation de services (BIC)"),        # F36232
+    ("CFE form 1447-C-SD", "Déclaration initiale de CFE (1447-C-SD)"),         # F23547
+])
+def test_the_french_uses_the_official_term(key, official):
+    assert CATALOG[key] == official
+
+
+@pytest.mark.parametrize("retired", [
+    "plafond", "Plafond", "mettre de côté", "Mettez", "franchise de TVA", "Franchise de TVA",
+    "Base imposable", "Abattement fiscal", "2042 C PRO", "Encaissements",
+])
+def test_the_french_no_longer_uses_a_retired_term(retired):
+    assert not [v[:70] for v in CATALOG.values() if retired in v]
+
+
+def test_every_official_term_stays_documented():
+    glossary = (ROOT / "docs" / "glossaire.md").read_text(encoding="utf-8")
+    for term in ("Seuil majoré", "Franchise en base de TVA", "Cotisations et contributions sociales",
+                 "Abattement forfaitaire", "Bénéfice imposable", "Facture d'avoir", "Registre des achats",
+                 "Pièce justificative", "Déclaration contrôlée", "Immobilisation"):
+        assert term in glossary, term
 
 
 # -- records don't depend on the language --------------------------------------

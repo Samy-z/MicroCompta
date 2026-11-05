@@ -32,7 +32,8 @@
 
     {"key": "cfe_form_md", "effective_from": "2026-01-01", "value": "12-31", "unit": "md", "label": "CFE form 1447-C-SD: month-day, creation year", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23547", "note": ""},
     {"key": "cfe_payment_md", "effective_from": "2026-01-01", "value": "12-15", "unit": "md", "label": "CFE payment: month-day", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23547", "note": "Nothing is owed in the first year of activity (F23999)."},
-    {"key": "vl_next_year_md", "effective_from": "2026-01-01", "value": "09-30", "unit": "md", "label": "Versement libératoire option for next year: month-day", "source": "Owner's brief, 2026-11-04; the impots.gouv.fr page read covers only the new-business window", "note": ""},
+    {"key": "vl_next_year_md", "effective_from": "2026-01-01", "value": "09-30", "unit": "md", "label": "Versement libératoire option for next year: month-day", "source": "DGFiP leaflet \"Les régimes réservés aux petites entreprises\", March 2026", "note": ""},
+    {"key": "fixed_asset_threshold", "effective_from": "2020-01-01", "value": "500", "unit": "eur", "label": "Fixed asset: amount excluding VAT above which equipment isn't a plain charge", "source": "https://www.impots.gouv.fr/professionnel/questions/que-puis-je-deduire-de-mes-resultats-professionnels", "note": "An administrative tolerance under a real regime. It changes nothing under the micro regime."},
     {"key": "tax_return_remind_md", "effective_from": "2026-01-01", "value": "04-01", "unit": "md", "label": "Start reminding about form 2042 C PRO: month-day", "source": "App reminder only. The filing date is published each spring", "note": "Not a legal date."},
     {"key": "figures_review_md", "effective_from": "2026-01-01", "value": "01-15", "unit": "md", "label": "Yearly reminder to re-check this table: month-day", "source": "App reminder only", "note": "Not a legal date."}
   ]

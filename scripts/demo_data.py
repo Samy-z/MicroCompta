@@ -71,5 +71,21 @@ def populate(book: Any, *, with_siren: bool = True) -> dict[str, Any]:
             ids[month] = invoice_id
     ids[9] = book.invoices.create_monthly_draft(client, 2026, 9)
 
+    # The kinds of purchase the register is for. Invented suppliers and amounts.
+    for paid_on, supplier, what, category, amount, share, method, ref in (
+        (date(2026, 7, 15), "Logiciel Exemple", "Abonnement mensuel, juillet", "Software and subscriptions",
+         "21.60", "1", "Bank card", "EX-2026-07"),
+        (date(2026, 8, 15), "Logiciel Exemple", "Abonnement mensuel, août", "Software and subscriptions",
+         "21.60", "1", "Bank card", "EX-2026-08"),
+        (date(2026, 9, 1), "Transports Exemple", "Forfait de transport, septembre", "Transport and travel",
+         "90", "0.5", "Direct debit", ""),
+        (date(2026, 10, 20), "Magasin Exemple", "Ordinateur portable", "Fixed asset",
+         "1200", "1", "Bank card", "MG-48213"),
+    ):
+        book.purchases.record(
+            paid_on=paid_on, supplier=supplier, description=what, category=category, amount_eur=amount,
+            pro_share=share, payment_method=method, piece_ref=ref,
+        )
+
     book.deadlines.set_done("acre:request")
     return {"client": client, "invoices": ids, "first_seq": first_seq}

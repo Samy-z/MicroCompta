@@ -14,7 +14,7 @@ from ..config import db_path
 from ..i18n import tr
 from .errors import ImmutableError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key VARCHAR PRIMARY KEY, value VARCHAR);
@@ -121,9 +121,35 @@ CREATE TABLE IF NOT EXISTS invoice_register (
     entry_hash    VARCHAR NOT NULL
 );
 
+-- Registre des achats. Insert-only: see Database.GUARDED.
+CREATE TABLE IF NOT EXISTS purchases (
+    seq            BIGINT PRIMARY KEY,
+    kind           VARCHAR NOT NULL,     -- purchase | reversal
+    reverses_seq   BIGINT,
+    reason         VARCHAR,
+    paid_on        DATE NOT NULL,
+    supplier       VARCHAR NOT NULL,
+    description    VARCHAR NOT NULL,
+    category       VARCHAR NOT NULL,
+    amount_eur     DECIMAL(14,2) NOT NULL,  -- what left the account, VAT included
+    pro_share      DECIMAL(5,4) NOT NULL,   -- 1 means wholly professional
+    payment_method VARCHAR NOT NULL,
+    piece_ref      VARCHAR,
+    recorded_at    TIMESTAMP NOT NULL,
+    prev_hash      VARCHAR NOT NULL,
+    entry_hash     VARCHAR NOT NULL
+);
+
+-- Its own table, so a database from before the register needs no ALTER.
+CREATE TABLE IF NOT EXISTS purchase_documents (
+    seq         BIGINT NOT NULL,
+    document_id BIGINT NOT NULL,
+    PRIMARY KEY (seq, document_id)
+);
+
 CREATE TABLE IF NOT EXISTS documents (
     id         BIGINT PRIMARY KEY,
-    kind       VARCHAR NOT NULL,      -- invoice | receipt | export | snapshot
+    kind       VARCHAR NOT NULL,      -- invoice | receipt | purchase | export | snapshot
     title      VARCHAR NOT NULL,
     rel_path   VARCHAR NOT NULL,
     size       BIGINT NOT NULL,
@@ -177,7 +203,7 @@ class Database:
 
     #: Records that can only ever grow. The app's only route to them is execute(),
     #: so this holds for every write the app can make. See core/chain.py for the rest.
-    GUARDED = ("ledger", "invoice_register")
+    GUARDED = ("ledger", "invoice_register", "purchases")
     _GUARD_RE = re.compile(
         rf"^\s*{_WRITE_VERBS}\s+(?:main\.)?\"?({'|'.join(GUARDED)})\"?\b", re.IGNORECASE
     )

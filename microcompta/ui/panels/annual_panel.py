@@ -28,8 +28,11 @@ def _checklist() -> list[tuple[str, str, str]]:
             "tax income."
         )),
         ("regime", tr("Micro regime, real regime or a company?"), tr(
-            "Compare your real costs with the flat allowance. The real regime is an option by "
-            "written notice to the SIE."
+            "The Expenses tab compares your real charges with the flat allowance. A real regime is an "
+            "option, by a dated and signed letter to the SIE, and it ends the micro-social regime."
+        )),
+        ("register", tr("Purchases register: complete, with its supporting documents?"), tr(
+            "Every purchase of the year on the Expenses tab, each with its invoice or receipt attached."
         )),
         ("expert", tr("One paid consultation with an expert-comptable?"), ""),
         ("limits", tr("Limits: any year over, or a second year running?"), tr(
@@ -67,7 +70,8 @@ class AnnualPanel(QWidget):
         layout.addWidget(Banner(
             "info",
             tr("This page reminds and adds up; it does not give tax advice. A micro-entrepreneur has "
-               "no annual bilan: the records are the livre des recettes and the invoices, kept 10 years."),
+               "no annual bilan: the records are the livre des recettes, the purchases register and the "
+               "invoices, with their supporting documents, kept 10 years."),
             tip=tr("Check anything that matters with URSSAF, the SIE or an expert-comptable."),
         ))
         self.problem = Banner("bad", tip=tr("A rate or limit is missing for this date."))

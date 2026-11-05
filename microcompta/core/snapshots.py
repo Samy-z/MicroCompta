@@ -20,6 +20,8 @@ from . import clock
 # and would make every check look like new data.
 _FINGERPRINT_TABLES = (
     ("ledger", "seq"),
+    ("purchases", "seq"),
+    ("purchase_documents", "seq, document_id"),
     ("invoice_register", "seq"),
     ("invoices", "id"),
     ("invoice_lines", "id"),
@@ -48,8 +50,9 @@ class Snapshots:
         return self.fingerprint() != self.book.db.get_meta(_META_KEY)
 
     def has_records(self) -> bool:
-        return bool(self.book.db.scalar("SELECT count(*) FROM ledger")) or bool(
-            self.book.db.scalar("SELECT count(*) FROM clients")
+        return any(
+            self.book.db.scalar(f"SELECT count(*) FROM {table}")
+            for table in ("ledger", "purchases", "clients")
         )
 
     def run(self, force: bool = False) -> list[int]:
@@ -84,6 +87,8 @@ class Snapshots:
             tmp.unlink(missing_ok=True)
         doc_ids.append(self.book.exports.ledger_csv(None))
         doc_ids.append(self.book.exports.invoices_csv())
+        if self.book.purchases.years():
+            doc_ids.append(self.book.exports.purchases_csv(None))
         self.book.db.set_meta(_META_KEY, fingerprint)
         self.book.db.set_meta("last_snapshot_at", when.isoformat())
         return doc_ids
@@ -92,7 +97,7 @@ class Snapshots:
         """A snapshot that cannot be opened is worse than none, because it looks like one."""
         con = duckdb.connect(str(path), read_only=True)
         try:
-            for table in ("ledger", "invoice_register", "clients"):
+            for table in ("ledger", "purchases", "invoice_register", "clients"):
                 copied = con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
                 live = self.book.db.scalar(f"SELECT count(*) FROM {table}")
                 if copied != live:

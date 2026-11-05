@@ -22,6 +22,7 @@ from .errors import ValidationError
 KIND_DIRS = {
     "invoice": "factures",
     "receipt": "recus",
+    "purchase": "achats",
     "export": "exports",
     "snapshot": "sauvegardes",
 }
@@ -136,6 +137,12 @@ class Documents:
     def for_ledger(self, seq: int) -> list[dict[str, Any]]:
         return self.db.rows(
             "SELECT * FROM documents WHERE ledger_seq = ? ORDER BY id", [seq]
+        )
+
+    def for_purchase(self, seq: int) -> list[dict[str, Any]]:
+        return self.db.rows(
+            "SELECT d.* FROM documents d JOIN purchase_documents p ON p.document_id = d.id "
+            "WHERE p.seq = ? ORDER BY d.id", [seq],
         )
 
     def verify(self) -> list[str]:

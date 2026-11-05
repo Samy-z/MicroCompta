@@ -21,7 +21,8 @@ from ..widgets.table_view import DataTable
 from .common import Banner, Chip, StatRow, bubble, card_frame, dim_label, guarded, heading
 
 # Document kinds are stored as these words. Marked here so they get translated when shown.
-KIND_LABELS = {"invoice": N_("invoice"), "receipt": N_("receipt"), "export": N_("export"),
+KIND_LABELS = {"invoice": N_("invoice"), "receipt": N_("receipt"), "purchase": N_("purchase receipt"),
+               "export": N_("export"),
                "snapshot": N_("snapshot")}
 
 

@@ -68,9 +68,10 @@ security page.
 | Kind | When | In Drive |
 | --- | --- | --- |
 | Invoice and credit note PDFs | when issued | `MicroCompta/<year>/factures/` |
-| Attached receipts | when attached | `MicroCompta/<year>/recus/` |
+| Receipts attached to a payment | when attached | `MicroCompta/<year>/recus/` |
+| Supporting documents attached to a purchase | when attached | `MicroCompta/<year>/achats/` |
 | CSV and PDF exports | when exported | `MicroCompta/<year>/exports/` |
-| Database snapshot (zipped), ledger CSV, invoice register CSV | a few minutes after a change, hourly if changed, and on quit | `MicroCompta/<year>/sauvegardes/` |
+| Database snapshot (zipped), ledger CSV, invoice register CSV, purchases register CSV | a few minutes after a change, hourly if changed, and on quit | `MicroCompta/<year>/sauvegardes/` |
 
 A document counts as **uploaded** only when Drive reports the same checksum as the local file.
 The queue is stored in the database, so it survives a restart:
@@ -102,6 +103,13 @@ into `%LOCALAPPDATA%\MicroCompta\documents\` so the integrity check can find the
 received. Each stores its gross, rate, fee and net separately. Entries can't be edited: a
 correction is a reversing entry with a reason. Totals every 3 months, exports in CSV and PDF.
 
+**Expenses (registre des achats).** Required in the VAT franchise: a yearly register with the
+detail of purchases of goods and services (art. 286 CGI, [F23266](https://entreprendre.service-public.gouv.fr/vosdroits/F23266)).
+Insert-only and hash-chained like the ledger, in euros, VAT included. It changes no other figure:
+under the micro regime expenses aren't deducted, and nothing in it is declared. The tab also shows
+the flat allowance next to real charges, plus social contributions at the micro rate, as a yardstick
+for the micro-or-real question. It is arithmetic, not advice, and it covers income tax only.
+
 **Invoices.** A monthly summary drafted from that month's payments. Drafts are fine without a
 SIREN, but a final invoice needs a valid one. Numbers are unbroken across all documents and
 years (`FA-2027-0012`, `AV-2027-0013`), chronological, and taken only when issuing succeeds in
@@ -117,8 +125,8 @@ the ECB rate on its issue date. Turnover uses the ledger: each payment's own rat
 received. The Invoices tab shows both numbers when they differ.
 
 **Immutability.** DuckDB has no triggers, so the database can't refuse a change by itself. The
-app's only write route refuses to touch the ledger and the invoice register. Both are also hash
-chains, and issued PDFs are checksummed, so a change made any other way (a direct SQL session, a
+app's only write route refuses to touch the ledger, the purchases register and the invoice
+register. All three are also hash chains, and issued PDFs are checksummed, so a change made any other way (a direct SQL session, a
 restored file) raises a red banner at the next check. The check runs at launch and every 6 hours.
 
 **Info bubbles.** Hold the mouse over any number, button or line to see what it means. The same
@@ -135,6 +143,10 @@ last checked on 2026-11-04, and a yearly reminder asks you to re-check them.
 The app starts in French. English is an option under Settings > Language, and applies straight
 away. Invoices, credit notes and the livre des recettes stay in French either way, because they
 are French legal records. Stored values are language-neutral, so switching can't change a record.
+
+The French follows the wording of the official texts rather than a literal translation, so that it
+matches what URSSAF and the tax office write. [docs/glossaire.md](docs/glossaire.md) gives each term
+and its source, and a test keeps the main ones from drifting.
 
 English is the source language: the text in the code is the key. To add a language, copy
 `microcompta/data/i18n/fr.json` to `<code>.json`, change `language_name`, and translate the
@@ -156,6 +168,8 @@ These aren't settled by the official sources read so far. The app labels them wh
 | Does ACRE reduce the versement libératoire part? | URSSAF | Assumes not. |
 | Formation professionnelle on top of the flat rate? | URSSAF | Assumes nothing extra, per F36232. |
 | Does a prorated first year count as a year over the ceiling? | URSSAF or SIE | Counts it, and says it's unstated. |
+| A subscription bought from a foreign business | SIE | Listed in the app. [impots.gouv.fr](https://www.impots.gouv.fr/professionnel/questions/je-suis-micro-entrepreneur-ou-la-tete-dune-micro-entreprise-ai-je-des) requires an EU VAT number and self-assessment for services from another EU state, whatever the amount; it doesn't cover non-EU suppliers. |
+| Deadline to opt for a real regime (BNC) | SIE | Listed in the app. BOFiP s.140 and the DGFiP leaflet of March 2026 disagree with F23267. |
 
 ## Data location
 

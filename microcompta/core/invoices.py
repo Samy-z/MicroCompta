@@ -425,7 +425,7 @@ class Invoices:
 
                 document_id = self.documents.add_file(
                     tmp, kind="invoice", year=issue_date.year, name=f"{number}.pdf",
-                    title=f"{'Avoir' if invoice['kind'] == 'credit_note' else 'Facture'} {number}",
+                    title=("Facture d'avoir " if invoice["kind"] == "credit_note" else "Facture ") + number,
                     invoice_id=invoice_id, move=True, read_only=True,
                 )
                 stored = self.documents.path_of(self.documents.get(document_id))

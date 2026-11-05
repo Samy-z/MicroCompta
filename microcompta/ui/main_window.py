@@ -32,6 +32,7 @@ from .panels.deadlines_panel import DeadlinesPanel
 from .panels.invoices_panel import InvoicesPanel
 from .panels.ledger_panel import LedgerPanel
 from .panels.payment_form import PaymentForm
+from .panels.purchases_panel import PurchasesPanel
 from .panels.settings_panel import SettingsDialog
 from .theme import STYLESHEET
 from .tray import TrayController
@@ -116,6 +117,7 @@ class MainWindow(QMainWindow):
         # Centre
         self.dashboard_panel = DashboardPanel(self.book)
         self.ledger_panel = LedgerPanel(self.book)
+        self.purchases_panel = PurchasesPanel(self.book)
         self.invoices_panel = InvoicesPanel(self.book)
         self.deadlines_panel = DeadlinesPanel(self.book)
         self.annual_panel = AnnualPanel(self.book)
@@ -125,6 +127,10 @@ class MainWindow(QMainWindow):
         for panel, label, tip in (
             (self.dashboard_panel, tr("Limits"), tr("Your turnover against each legal limit, and what to set aside.")),
             (self.ledger_panel, tr("Payments"), tr("The livre des recettes: every payment received, with totals every 3 months.")),
+            (self.purchases_panel, tr("Expenses"), tr(
+                "The purchases register: what you buy for the activity. It changes neither turnover "
+                "nor contributions."
+            )),
             (self.invoices_panel, tr("Invoices"), tr("Drafts, issued invoices and credit notes.")),
             (self.deadlines_panel, tr("Deadlines"), tr("Declarations and other dates, worked out from your start date.")),
             (self.annual_panel, tr("Annual"), tr("The year's totals, the figure for your tax return, and a review checklist.")),
@@ -343,10 +349,10 @@ class MainWindow(QMainWindow):
     def _wire(self) -> None:
         self.form.recorded.connect(lambda _seq: self.on_records_changed())
         self.form.status.connect(self.set_status)
-        for panel in (self.ledger_panel, self.invoices_panel, self.deadlines_panel,
+        for panel in (self.ledger_panel, self.purchases_panel, self.invoices_panel, self.deadlines_panel,
                       self.settings_panel, self.backup_panel):
             panel.status.connect(self.set_status)
-        for panel in (self.ledger_panel, self.invoices_panel, self.deadlines_panel,
+        for panel in (self.ledger_panel, self.purchases_panel, self.invoices_panel, self.deadlines_panel,
                       self.settings_panel):
             panel.changed.connect(self.on_records_changed)
         # Not directly: this deletes the dialog whose button is still being pressed.
@@ -418,7 +424,7 @@ class MainWindow(QMainWindow):
         if self._closed:
             return
         self.form.reload()
-        for panel in (self.dashboard_panel, self.ledger_panel, self.invoices_panel,
+        for panel in (self.dashboard_panel, self.ledger_panel, self.purchases_panel, self.invoices_panel,
                       self.deadlines_panel, self.annual_panel, self.backup_panel):
             panel.reload()
         self._refresh_labels()
@@ -624,6 +630,9 @@ class MainWindow(QMainWindow):
             self, tr("How this works"),
             tr("<b>Payments</b>: one entry per payment received. Turnover counts on the date received. "
                "Entries can't be edited; a correction is a reversing entry with a reason.<br><br>"
+               "<b>Expenses</b>: the purchases register, which the VAT franchise requires. Under the "
+               "micro regime it changes nothing you pay: expenses aren't deducted, and nothing in it is "
+               "declared.<br><br>"
                "<b>Invoices</b>: a monthly summary drafted from that month's payments. Drafts are "
                "fine without a SIREN, but a final invoice needs one. Numbers are unbroken and issued "
                "invoices can't change; a correction is a credit note.<br><br>"

@@ -55,6 +55,21 @@ OPEN_QUESTIONS: list[dict[str, str]] = [
                      "0.1-0.2%. The rates in Figures assume nothing extra."),
     },
     {
+        "topic": N_("A subscription bought from a foreign business"),
+        "who": "SIE",
+        "status": N_("open"),
+        "detail": N_("impots.gouv.fr says that buying a service from a business in another EU state "
+                     "takes an EU VAT number and self-assessing the VAT, whatever the amount. It "
+                     "doesn't cover a non-EU supplier, or a supplier that already charges French VAT."),
+    },
+    {
+        "topic": N_("Deadline to opt for a real regime (BNC)"),
+        "who": "SIE",
+        "status": N_("sources differ; SIE to confirm"),
+        "detail": N_("BOFiP s.140 and the DGFiP leaflet of March 2026 allow it until the 2035 return "
+                     "for the year concerned is due, the following spring. F23267 says the year before."),
+    },
+    {
         "topic": N_("A prorated first year as a year over the ceiling"),
         "who": N_("URSSAF or SIE"),
         "status": N_("open"),

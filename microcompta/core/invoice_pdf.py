@@ -62,7 +62,7 @@ def _party_block(label: str, lines: list[str]) -> list[Any]:
 def render_invoice_pdf(snapshot: dict[str, Any], path: Path | str, draft: bool = False) -> None:
     currency = snapshot["currency"]
     is_credit = snapshot["kind"] == "credit_note"
-    doc_title = "AVOIR" if is_credit else "FACTURE"
+    doc_title = "FACTURE D'AVOIR" if is_credit else "FACTURE"
     seller = snapshot["seller"]
     client = snapshot["client"]
 
@@ -131,7 +131,7 @@ def render_invoice_pdf(snapshot: dict[str, Any], path: Path | str, draft: bool =
 
     if is_credit and snapshot["credits_number"]:
         story += [
-            _p(f"Avoir annulant la facture n° {snapshot['credits_number']}.", STRONG),
+            _p(f"Facture d'avoir annulant la facture n° {snapshot['credits_number']}.", STRONG),
             _p(f"Motif : {snapshot['reason']}"),
             Spacer(1, 4 * mm),
         ]

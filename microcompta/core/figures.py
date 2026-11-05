@@ -26,7 +26,8 @@ class Figures:
         self.seed()
 
     def seed(self) -> None:
-        """Insert seed rows that are missing. Never overwrites an edit."""
+        """Insert seed rows that are missing, and bring the wording of untouched rows up to
+        date, so a corrected source reaches an existing database. Never overwrites an edit."""
         rows = json.loads(self.seed_path.read_text(encoding="utf-8"))["figures"]
         with self.db.transaction():
             for r in rows:
@@ -39,6 +40,14 @@ class Figures:
                         "INSERT INTO figures (key, effective_from, value, unit, label, source, note) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?)",
                         [r["key"], r["effective_from"], r["value"], r["unit"],
+                         r["label"], r["source"], r["note"]],
+                    )
+                else:
+                    self.db.execute(
+                        "UPDATE figures SET label = ?, source = ?, note = ? "
+                        "WHERE key = ? AND effective_from = ? AND edited_at IS NULL "
+                        "AND (label IS DISTINCT FROM ? OR source IS DISTINCT FROM ? OR note IS DISTINCT FROM ?)",
+                        [r["label"], r["source"], r["note"], r["key"], r["effective_from"],
                          r["label"], r["source"], r["note"]],
                     )
 

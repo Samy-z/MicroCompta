@@ -54,6 +54,7 @@ def capture(win, app, folder: str = "") -> None:
     for name, panel in (
         ("01_limits", win.dashboard_panel),
         ("02_payments", win.ledger_panel),
+        ("02b_expenses", win.purchases_panel),
         ("03_invoices", win.invoices_panel),
         ("04_deadlines", win.deadlines_panel),
         ("05_annual", win.annual_panel),

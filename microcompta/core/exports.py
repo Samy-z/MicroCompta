@@ -22,6 +22,7 @@ from ..i18n import translate
 from . import clock
 from .ledger_policy import TurnoverPolicy, counted_eur
 from .money import ZERO, fmt_amount_fr, fmt_date_fr, fmt_rate_fr
+from .purchases import professional_amount
 
 BASIS_FR = {"gross": "brut, avant frais du prestataire", "net_of_fees": "net des frais du prestataire"}
 FX_FR = {
@@ -36,6 +37,12 @@ LEDGER_HEADER = [
     "Devise des frais", "Frais EUR", "Net crédité", "Devise du net", "Mode de règlement",
     "Référence prestataire", "Facture liée", "Écriture annulée", "Motif",
     "Retenu pour le chiffre d'affaires (EUR)",
+]
+
+PURCHASES_HEADER = [
+    "N° écriture", "Type", "Date de paiement", "Fournisseur", "Désignation", "Nature",
+    "Montant payé TTC (EUR)", "Part professionnelle (%)", "Montant professionnel (EUR)",
+    "Mode de paiement", "Référence de la pièce justificative", "Écriture annulée", "Motif",
 ]
 
 
@@ -137,7 +144,7 @@ class Exports:
                                  "Taux (devise pour 1 EUR)", "Contre-valeur EUR", "SHA-256 du PDF"])
                 for r in self.book.invoices.register():
                     writer.writerow([
-                        r["number"], "Facture" if r["kind"] == "invoice" else "Avoir",
+                        r["number"], "Facture" if r["kind"] == "invoice" else "Facture d'avoir",
                         r["issue_date"].isoformat(), r["client_name"], r["currency"],
                         _csv_amount(r["total"]), _csv_rate(r["fx_rate"]),
                         _csv_amount(r["total_eur"]), r["pdf_sha256"],
@@ -150,6 +157,152 @@ class Exports:
         except BaseException:
             tmp.unlink(missing_ok=True)
             raise
+
+    # -- purchases register --------------------------------------------------
+    def _purchases_rows(self, year: int | None) -> list[list[str]]:
+        purchases = self.book.purchases
+        years = [year] if year is not None else sorted(purchases.years())
+        out: list[list[str]] = []
+        for y in years:
+            for e in purchases.entries(y):
+                out.append([
+                    str(e["seq"]),
+                    "Achat" if e["kind"] == "purchase" else "Annulation",
+                    e["paid_on"].isoformat(),
+                    e["supplier"],
+                    e["description"],
+                    translate(e["category"], "fr"),
+                    _csv_amount(e["amount_eur"]),
+                    f"{Decimal(e['pro_share']) * 100:.0f}",
+                    _csv_amount(professional_amount(e)),
+                    translate(e["payment_method"], "fr"),
+                    e["piece_ref"] or "",
+                    "" if e["reverses_seq"] is None else str(e["reverses_seq"]),
+                    e["reason"] or "",
+                ])
+            totals = purchases.totals(y)
+            row = [""] * len(PURCHASES_HEADER)
+            row[1] = f"Total {y}"
+            row[6] = _csv_amount(totals["paid"])
+            row[8] = _csv_amount(totals["pro"])
+            out.append(row)
+        return out
+
+    def purchases_csv(self, year: int | None = None) -> int:
+        tmp = self._temp(".csv")
+        try:
+            with open(tmp, "w", newline="", encoding="utf-8-sig") as fh:
+                writer = csv.writer(fh, delimiter=";")
+                writer.writerow(PURCHASES_HEADER)
+                writer.writerows(self._purchases_rows(year))
+            scope = str(year) if year is not None else "complet"
+            return self.book.documents.add_file(
+                tmp, kind="export", year=year or clock.today().year,
+                name=f"registre_achats_{scope}_{self._stamp()}.csv",
+                title=f"Registre des achats {scope} (CSV)", move=True,
+            )
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    def purchases_pdf(self, year: int) -> int:
+        tmp = self._temp(".pdf")
+        try:
+            self._render_purchases_pdf(year, tmp)
+            return self.book.documents.add_file(
+                tmp, kind="export", year=year,
+                name=f"registre_achats_{year}_{self._stamp()}.pdf",
+                title=f"Registre des achats {year} (PDF)", move=True,
+            )
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
+    def _render_purchases_pdf(self, year: int, path: Path) -> None:
+        profile = self.book.profile()
+        accent = colors.HexColor("#2d5c96")
+        band = colors.HexColor("#eef2f7")
+        rule = colors.HexColor("#c9d0da")
+        muted = colors.HexColor("#5b6472")
+
+        body = ParagraphStyle("b", fontName="Helvetica", fontSize=7.6, leading=9.4)
+        right = ParagraphStyle("r", parent=body, alignment=TA_RIGHT)
+        bold = ParagraphStyle("bo", parent=body, fontName="Helvetica-Bold")
+        bold_r = ParagraphStyle("bor", parent=bold, alignment=TA_RIGHT)
+        head = ParagraphStyle("h", parent=bold, textColor=colors.white)
+        head_r = ParagraphStyle("hr", parent=head, alignment=TA_RIGHT)
+        title = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=15, leading=19, textColor=accent)
+        note = ParagraphStyle("n", fontName="Helvetica", fontSize=8, leading=10.5, textColor=muted)
+
+        def p(text: Any, style: ParagraphStyle = body) -> Paragraph:
+            return Paragraph(escape(str(text if text is not None else "")), style)
+
+        columns = ["N°", "Date de paiement", "Fournisseur", "Désignation", "Nature", "Montant TTC",
+                   "Part pro.", "Montant pro.", "Mode de paiement", "Pièce justificative"]
+        numeric = {"Montant TTC", "Part pro.", "Montant pro."}
+        rows: list[list[Any]] = [[p(c, head_r if c in numeric else head) for c in columns]]
+        for e in self.book.purchases.entries(year):
+            what = e["description"]
+            if e["kind"] == "reversal":
+                what = f"Annulation de l'écriture {e['reverses_seq']} : {e['reason']}"
+            rows.append([
+                p(e["seq"]), p(fmt_date_fr(e["paid_on"])), p(e["supplier"]), p(what),
+                p(translate(e["category"], "fr")),
+                p(fmt_amount_fr(e["amount_eur"], "EUR"), right),
+                p(f"{Decimal(e['pro_share']) * 100:.0f} %", right),
+                p(fmt_amount_fr(professional_amount(e), "EUR"), right),
+                p(translate(e["payment_method"], "fr")), p(e["piece_ref"]),
+            ])
+        totals = self.book.purchases.totals(year)
+        marker = len(rows)
+        rows.append([
+            p(""), p(""), p(f"Total {year}", bold), p(""), p(""),
+            p(fmt_amount_fr(totals["paid"], "EUR"), bold_r), p(""),
+            p(fmt_amount_fr(totals["pro"], "EUR"), bold_r), p(""), p(""),
+        ])
+
+        page = landscape(A4)
+        width = page[0] - 24 * mm
+        widths = [0.035, 0.075, 0.13, 0.205, 0.125, 0.08, 0.05, 0.08, 0.09, 0.13]
+        table = Table(rows, repeatRows=1, colWidths=[width * w for w in widths])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), accent),
+            ("BACKGROUND", (0, marker), (-1, marker), band),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.3, rule),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ]))
+
+        seller = profile.display_name or "Identité à renseigner"
+        if profile.siren.strip():
+            seller += f" - SIREN {profile.siren.strip()}"
+
+        def footer(canvas: Any, doc: Any) -> None:
+            canvas.saveState()
+            canvas.setFont("Helvetica", 7.5)
+            canvas.setFillColor(muted)
+            canvas.drawString(12 * mm, 8 * mm, f"Registre des achats {year} - {seller}")
+            canvas.drawRightString(page[0] - 12 * mm, 8 * mm, f"Page {doc.page}")
+            canvas.restoreState()
+
+        doc = SimpleDocTemplate(str(path), pagesize=page, leftMargin=12 * mm, rightMargin=12 * mm,
+                                topMargin=12 * mm, bottomMargin=14 * mm,
+                                title=f"Registre des achats {year}", author=seller)
+        doc.build(
+            [
+                p(f"Registre des achats {year}", title),
+                p(seller, note),
+                Spacer(1, 3 * mm),
+                table,
+                Spacer(1, 4 * mm),
+                p("Montants payés, TVA comprise. Les écritures ne sont jamais modifiées : une correction "
+                  "est une écriture d'annulation motivée.", note),
+            ],
+            onFirstPage=footer, onLaterPages=footer,
+        )
 
     # -- ledger PDF ---------------------------------------------------------
     def ledger_pdf(self, year: int) -> int:
