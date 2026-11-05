@@ -26,6 +26,7 @@ from .language import apply_language
 from .models import wrap_tip
 from .panels.annual_panel import AnnualPanel
 from .panels.backup_panel import BackupPanel
+from .panels.clients_panel import ClientsPanel
 from .panels.common import Banner, bubble
 from .panels.dashboard_panel import DashboardPanel
 from .panels.deadlines_panel import DeadlinesPanel
@@ -118,6 +119,7 @@ class MainWindow(QMainWindow):
         self.dashboard_panel = DashboardPanel(self.book)
         self.ledger_panel = LedgerPanel(self.book)
         self.purchases_panel = PurchasesPanel(self.book)
+        self.clients_panel = ClientsPanel(self.book)
         self.invoices_panel = InvoicesPanel(self.book)
         self.deadlines_panel = DeadlinesPanel(self.book)
         self.annual_panel = AnnualPanel(self.book)
@@ -131,6 +133,7 @@ class MainWindow(QMainWindow):
                 "The purchases register: what you buy for the activity. It changes neither turnover "
                 "nor contributions."
             )),
+            (self.clients_panel, tr("Clients"), tr("Who you invoice.")),
             (self.invoices_panel, tr("Invoices"), tr("Drafts, issued invoices and credit notes.")),
             (self.deadlines_panel, tr("Deadlines"), tr("Declarations and other dates, worked out from your start date.")),
             (self.annual_panel, tr("Annual"), tr("The year's totals, the figure for your tax return, and a review checklist.")),
@@ -292,7 +295,7 @@ class MainWindow(QMainWindow):
         gear.setObjectName("brandGear")
         gear.setFixedSize(34, 29)
         gear.setCursor(Qt.PointingHandCursor)
-        bubble(gear, tr("Settings: your identity, your clients, rates and limits, and the app's "
+        bubble(gear, tr("Settings: your identity, rates and limits, and the app's "
                         "language (Ctrl+,)."), tr("Settings"))
         gear.clicked.connect(lambda _c=False: self.open_settings())
         bar.addWidget(gear)
@@ -348,12 +351,13 @@ class MainWindow(QMainWindow):
     # -- wiring -------------------------------------------------------------
     def _wire(self) -> None:
         self.form.recorded.connect(lambda _seq: self.on_records_changed())
+        self.form.client_added.connect(self.on_records_changed)
         self.form.status.connect(self.set_status)
-        for panel in (self.ledger_panel, self.purchases_panel, self.invoices_panel, self.deadlines_panel,
-                      self.settings_panel, self.backup_panel):
+        for panel in (self.ledger_panel, self.purchases_panel, self.clients_panel, self.invoices_panel,
+                      self.deadlines_panel, self.settings_panel, self.backup_panel):
             panel.status.connect(self.set_status)
-        for panel in (self.ledger_panel, self.purchases_panel, self.invoices_panel, self.deadlines_panel,
-                      self.settings_panel):
+        for panel in (self.ledger_panel, self.purchases_panel, self.clients_panel, self.invoices_panel,
+                      self.deadlines_panel, self.settings_panel):
             panel.changed.connect(self.on_records_changed)
         # Not directly: this deletes the dialog whose button is still being pressed.
         self.settings_panel.language_changed.connect(
@@ -417,15 +421,15 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self.open_settings(0))
         elif not self.book.clients.list():
             self.set_status(tr("Add your client to start recording payments."))
-            QTimer.singleShot(0, lambda: self.open_settings(1))
+            self.tabs.setCurrentWidget(self.clients_panel)
 
     # -- refresh ------------------------------------------------------------
     def reload_all(self) -> None:
         if self._closed:
             return
         self.form.reload()
-        for panel in (self.dashboard_panel, self.ledger_panel, self.purchases_panel, self.invoices_panel,
-                      self.deadlines_panel, self.annual_panel, self.backup_panel):
+        for panel in (self.dashboard_panel, self.ledger_panel, self.purchases_panel, self.clients_panel,
+                      self.invoices_panel, self.deadlines_panel, self.annual_panel, self.backup_panel):
             panel.reload()
         self._refresh_labels()
 

@@ -221,6 +221,14 @@ QLabel#dockTitleText {{
     font-size: 10px;
     letter-spacing: 1px;
 }}
+QPushButton#addClient {{
+    padding: 0;
+    color: {ACCENT};
+    font-size: 18px;
+    font-weight: 600;
+}}
+QPushButton#addClient:hover {{ background: {ACCENT}; border-color: {ACCENT}; color: #0b0d12; }}
+QPushButton#addClient:focus {{ border-color: {ACCENT}; }}
 QPushButton#dockCollapse {{
     background: transparent;
     border: 1px solid {BORDER};

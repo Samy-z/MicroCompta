@@ -8,7 +8,7 @@ from typing import Any
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLineEdit, QMessageBox,
-    QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from ...core import clock
@@ -18,11 +18,13 @@ from ...core.ledger import PAYMENT_METHODS, RATE_SOURCES
 from ...core.ledger_policy import UNCONFIRMED
 from ...core.money import fmt_money, round_money, to_decimal
 from ...i18n import fmt_number, fmt_percent, fmt_rate, tr
+from .clients_panel import ask_for_new_client
 from .common import bubble, dim_label, form_row, from_qdate, guarded, make_date_edit, to_qdate
 
 
 class PaymentForm(QScrollArea):
     recorded = Signal(int)
+    client_added = Signal()
     status = Signal(str)
 
     def __init__(self, book: Book, parent: QWidget | None = None):
@@ -46,11 +48,28 @@ class PaymentForm(QScrollArea):
             "The day the money arrived. Turnover counts on this date, not the invoice date."
         ))
         self.client = QComboBox()
+        # A long client name must not decide the width of the whole form. The list itself
+        # still opens wide enough to read it: see reload().
+        self.client.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.client.setMinimumContentsLength(12)
         self.client.currentIndexChanged.connect(self._on_client)
-        form_row(form, tr("Client"), self.client, tr(
-            "Who paid. The ledger keeps a copy of the name. Clients are added in Settings: "
-            "the gear icon at the top right."
+        self.add_client_button = QPushButton("+")
+        self.add_client_button.setObjectName("addClient")
+        self.add_client_button.setFixedWidth(30)
+        self.add_client_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)   # as tall as the list
+        self.add_client_button.clicked.connect(lambda _checked=False: self.add_client())
+        client_row = QHBoxLayout()
+        client_row.setSpacing(4)
+        client_row.addWidget(self.client, 1)
+        client_row.addWidget(self.add_client_button)
+        form_row(form, tr("Client"), client_row, tr(
+            "Who paid. The ledger keeps a copy of the name. To add one, use the + button beside "
+            "this list, or the Clients tab."
         ))
+        bubble(self.add_client_button, tr(
+            "Add a client without leaving this form. It opens the same window as the Clients tab, "
+            "and the new client is selected here."
+        ), tr("Add client…"))
         self.description = QLineEdit()
         self.description.setPlaceholderText(tr("Annotation work, week 12"))
         form_row(form, tr("Description"), self.description, tr(
@@ -174,15 +193,26 @@ class PaymentForm(QScrollArea):
             if index >= 0:
                 self.client.setCurrentIndex(index)
         self.client.blockSignals(False)
+        self.client.view().setMinimumWidth(self.client.view().sizeHintForColumn(0) + 12)
         has_client = self.client.count() > 0
         self.record_button.setEnabled(has_client)
         bubble(self.record_button, tr(
             "Adds this payment to the ledger. It can't be edited afterwards, only reversed."
-        ) if has_client else tr(
-            "Add a client first, in Settings: the gear icon at the top right."
-        ))
+        ) if has_client else tr("Add a client first, with the + button beside the Client list."))
         self.date.setMaximumDate(to_qdate(clock.today()))
         self._on_client()
+
+    def add_client(self) -> None:
+        """What is already typed in the form stays, so a payment can carry on from here."""
+        client = ask_for_new_client(self.book, self)
+        if client is None:
+            return
+        self.reload()
+        index = self.client.findData(client["id"])
+        if index >= 0:     # an inactive client isn't offered here
+            self.client.setCurrentIndex(index)
+        self.status.emit(tr("Client {name} added.", name=client["name"]))
+        self.client_added.emit()
 
     def _currency(self) -> str:
         client_id = self.client.currentData()
@@ -194,6 +224,9 @@ class PaymentForm(QScrollArea):
         self.gross.setPlaceholderText(f"{fmt_number(0)} {currency}")
         if currency == "EUR":
             self.rate.setText("1")
+        elif not self.rate.isEnabled():
+            # Leaving a euro client. That 1 was filled in here, and would pass for a real rate.
+            self.rate.clear()
         self.rate.setEnabled(currency != "EUR")
         self.fee_currency.setItemText(0, currency if currency != "EUR" else "EUR")
         self._update_preview()
@@ -254,7 +287,7 @@ class PaymentForm(QScrollArea):
         client_id = self.client.currentData()
         if client_id is None:
             QMessageBox.information(self, tr("No client"),
-                                    tr("Add a client first, in Settings: the gear icon at the top right."))
+                                    tr("Add a client first, with the + button beside the Client list."))
             return None
         received_on = from_qdate(self.date.date())
         summary = tr(

@@ -55,6 +55,7 @@ def capture(win, app, folder: str = "") -> None:
         ("01_limits", win.dashboard_panel),
         ("02_payments", win.ledger_panel),
         ("02b_expenses", win.purchases_panel),
+        ("02c_clients", win.clients_panel),
         ("03_invoices", win.invoices_panel),
         ("04_deadlines", win.deadlines_panel),
         ("05_annual", win.annual_panel),
@@ -67,7 +68,7 @@ def capture(win, app, folder: str = "") -> None:
         grab(win, prefix + name)
 
     win.tabs.setCurrentWidget(win.dashboard_panel)
-    for index, name in enumerate(("07_settings_identity", "08_settings_clients", "09_settings_figures")):
+    for index, name in enumerate(("07_settings_identity", "08_settings_figures")):
         win.open_settings(index)
         app.processEvents()
         grab(win.settings_dialog, prefix + name)

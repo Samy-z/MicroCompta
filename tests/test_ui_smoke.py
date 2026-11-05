@@ -32,11 +32,12 @@ from microcompta import config, i18n  # noqa: E402
 from microcompta.ui.main_window import MainWindow  # noqa: E402
 from microcompta.ui.models import wrap_tip  # noqa: E402
 from microcompta.ui.panels import common  # noqa: E402
+from microcompta.ui.panels.clients_panel import ClientDialog  # noqa: E402
 from microcompta.ui.panels.common import Chip, StatCard, bubble, from_qdate  # noqa: E402
 from microcompta.ui.panels.invoices_panel import CreditDialog, EditDraftDialog, IssueDialog  # noqa: E402
 from microcompta.ui.panels.ledger_panel import ReverseDialog  # noqa: E402
 from microcompta.ui.panels.purchases_panel import PurchaseDialog, ReversePurchaseDialog  # noqa: E402
-from microcompta.ui.panels.settings_panel import ClientDialog, FigureDialog  # noqa: E402
+from microcompta.ui.panels.settings_panel import FigureDialog  # noqa: E402
 from microcompta.ui.widgets.table_view import DataTable  # noqa: E402
 from microcompta.ui.widgets.threshold_bar import ThresholdBar  # noqa: E402
 from microcompta.ui.theme import STYLESHEET  # noqa: E402
@@ -609,8 +610,7 @@ def test_reverse_dialog_needs_and_records_a_reason(book, demo, qapp, tmp_path, a
 
 def test_client_dialog_adds_and_edits(book, qapp, tmp_path, answer_dialogs):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
-    panel = win.settings_panel
-    panel.reload()
+    panel = win.clients_panel
 
     def add(dialog: Any) -> None:
         dialog.name.setText("Client Test")
@@ -623,10 +623,12 @@ def test_client_dialog_adds_and_edits(book, qapp, tmp_path, answer_dialogs):
     client = book.clients.list()[0]
     assert client["name"] == "Client Test"
     assert client["taxed_in_france"] is True
+    assert "Client Test" in win.status_label.text()
     assert win.form.client.count() == 1
     assert win.form.record_button.isEnabled()
 
-    panel.clients_table.select_first()
+    assert panel.table.model.rows[0]["name"] == "Client Test"
+    panel.table.select_first()
 
     def edit(dialog: Any) -> None:
         assert dialog.name.text() == "Client Test"
@@ -635,7 +637,7 @@ def test_client_dialog_adds_and_edits(book, qapp, tmp_path, answer_dialogs):
     answer_dialogs.append(edit)
     panel.edit_client()
     assert book.clients.list()[0]["taxed_in_france"] is False
-    assert "probably; SIE to confirm" in panel.clients_table.model.rows[0]["vat_flag"]
+    assert "probably; SIE to confirm" in panel.table.model.rows[0]["vat_flag"]
     win._finish_quit(None)
 
 
@@ -1013,13 +1015,331 @@ def test_the_register_exports_from_the_tab(book, demo, qapp, tmp_path):
     win._finish_quit(None)
 
 
+# -- clients: a tab of their own, and a button beside the form's list -----------
+def _new_client(name: str = "Nouveau Client", currency: str = "USD", active: bool = True) -> Any:
+    def fill(dialog: Any) -> None:
+        dialog.name.setText(name)
+        dialog.currency.setCurrentText(currency)
+        dialog.active.setChecked(active)
+    return fill
+
+
+def _client_named(book: Any, name: str) -> dict[str, Any]:
+    return next(c for c in book.clients.list() if c["name"] == name)
+
+
+@pytest.mark.parametrize("language, before, after", [("fr", "Dépenses", "Factures"), ("en", "Expenses", "Invoices")])
+def test_clients_is_a_tab_between_expenses_and_invoices(book, demo, qapp, tmp_path, language, before, after):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language=language)
+    index = win.tabs.indexOf(win.clients_panel)
+    assert win.tabs.tabText(index - 1) == before
+    assert win.tabs.tabText(index) == "Clients"
+    assert win.tabs.tabText(index + 1) == after
+    assert win.tabs.tabToolTip(index)
+    assert [row["name"] for row in win.clients_panel.table.model.rows] == [c["name"] for c in book.clients.list()]
+    win._finish_quit(None)
+
+
+def test_settings_no_longer_holds_the_clients(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    tabs = win.settings_panel.tabs
+    assert [tabs.tabText(i) for i in range(tabs.count())] == ["Identity and activity", "Figures"]
+    win.open_settings(1)
+    qapp.processEvents()
+    assert win.settings_panel.figures_table.isVisible()
+    assert "clients" not in win.settings_button.toolTip().lower()
+    win._finish_quit(None)
+
+
+def test_a_set_up_profile_with_no_client_lands_on_the_clients_tab(book, qapp, tmp_path):
+    profile = book.profile()
+    profile.legal_name, profile.address, profile.start_date = "Camille Exemple", "12 rue de l'Exemple", date(2026, 11, 2)
+    book.save_profile(profile)
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    assert win.tabs.currentWidget() is win.clients_panel
+    assert not win.settings_dialog.isVisible()
+    win._finish_quit(None)
+
+
+def test_the_plus_button_sits_right_beside_the_client_list(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    combo, button = win.form.client, win.form.add_client_button
+    assert button.text() == "+"
+    assert button.accessibleName() == "Add client…"
+    assert button.toolTip() and button.toolTip() != combo.toolTip()
+    assert combo.accessibleName() == "Client"     # the list keeps its own name and bubble
+    assert "+" in combo.toolTip()
+    assert 0 < button.geometry().left() - combo.geometry().right() <= 8
+    assert button.geometry().top() == combo.geometry().top()
+    assert button.height() == combo.height()
+    win._finish_quit(None)
+
+
+def test_the_plus_button_adds_to_the_same_clients_and_selects_the_new_one(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    count = len(book.clients.list())
+    win.form.description.setText("Annotation")
+    win.form.gross.setText("100")
+    seen: list[Any] = []
+
+    def fill(dialog: Any) -> None:
+        seen.append(type(dialog))
+        _new_client()(dialog)
+
+    answer_dialogs.append(fill)
+    win.form.add_client_button.click()
+
+    assert seen == [ClientDialog]                # the same window as the tab's
+    assert len(book.clients.list()) == count + 1
+    new = _client_named(book, "Nouveau Client")
+    assert win.form.client.currentData() == new["id"]
+    assert win.form.description.text() == "Annotation"   # the payment under way is still there
+    assert win.form.gross.text() == "100"
+    assert new["id"] in [row["id"] for row in win.clients_panel.table.model.rows]
+    assert "Nouveau Client" in win.status_label.text()
+    assert win.snapshot_debounce.isActive()      # a change like any other, so it gets backed up
+    win._finish_quit(None)
+
+
+def test_a_payment_can_be_recorded_for_the_client_just_added(book, demo, qapp, tmp_path, answer_dialogs, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    monkeypatch.setattr(win.form, "_confirm", lambda _s: True)
+    answer_dialogs.append(_new_client())
+    win.form.add_client()
+    fill_form(win)
+    seq = win.form.record()
+    assert book.ledger.get(seq)["client_id"] == _client_named(book, "Nouveau Client")["id"]
+    assert book.verify() == []
+    win._finish_quit(None)
+
+
+def test_the_first_client_unlocks_recording_from_the_form(book, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    assert not win.form.record_button.isEnabled()
+    assert "+" in win.form.record_button.toolTip()
+    answer_dialogs.append(_new_client(currency="EUR"))
+    win.form.add_client()
+    assert win.form.client.currentText() == "Nouveau Client"
+    assert win.form.record_button.isEnabled()
+    assert win.form.rate.text() == "1"           # a euro client needs no rate
+    win._finish_quit(None)
+
+
+def test_a_client_added_on_the_tab_doesnt_change_the_selection(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    selected = win.form.client.currentData()
+    answer_dialogs.append(_new_client("AAA Premier"))
+    win.clients_panel.add_client()
+    assert win.form.client.findText("AAA Premier") >= 0
+    assert win.form.client.currentData() == selected
+    win._finish_quit(None)
+
+
+def test_cancelling_the_plus_button_changes_nothing(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    count, selected = len(book.clients.list()), win.form.client.currentData()
+    answer_dialogs.append(None)
+    win.form.add_client()
+    assert len(book.clients.list()) == count
+    assert win.form.client.currentData() == selected
+    assert not win.snapshot_debounce.isActive()
+    win._finish_quit(None)
+
+
+def test_a_client_refused_from_the_form_says_why_and_changes_nothing(book, demo, qapp, tmp_path, answer_dialogs, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    count, selected = len(book.clients.list()), win.form.client.currentData()
+    answer_dialogs.append(_new_client(name="   "))
+    win.form.add_client()
+    assert warnings == ["A client needs a name."]
+    assert len(book.clients.list()) == count
+    assert win.form.client.currentData() == selected
+    win._finish_quit(None)
+
+
+def test_an_inactive_new_client_is_saved_but_not_offered(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    answer_dialogs.append(_new_client("ZZZ Dernier"))    # not the first row, which a reload falls back to
+    win.form.add_client()
+    selected = win.form.client.currentData()
+    answer_dialogs.append(_new_client(active=False))
+    win.form.add_client()
+    new = _client_named(book, "Nouveau Client")
+    assert win.form.client.findData(new["id"]) == -1
+    assert win.form.client.currentData() == selected
+    assert new["id"] in [row["id"] for row in win.clients_panel.table.model.rows]
+    win._finish_quit(None)
+
+
+def test_a_long_client_name_doesnt_stretch_the_form(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    QTest.qWait(30)
+    width = win.payment_dock.width()
+    long_name = "Société Internationale de Formation Professionnelle et de Conseil SARL"
+    answer_dialogs.append(_new_client(long_name))
+    win.form.add_client()
+    QTest.qWait(30)
+    assert win.payment_dock.width() == width
+    # Found on screen: the width only grew once the form was built again, as at the next launch.
+    win.rebuild_for_language()
+    QTest.qWait(200)
+    qapp.processEvents()
+    assert win.payment_dock.width() == width
+    assert not win.form.horizontalScrollBar().isVisible()
+    combo = win.form.client
+    assert combo.sizeHint().width() < combo.fontMetrics().horizontalAdvance(long_name)
+    view = win.form.client.view()
+    assert view.minimumWidth() >= view.sizeHintForColumn(0)    # the name can still be read in the list
+    win._finish_quit(None)
+
+
+def test_the_plus_button_still_works_after_a_language_switch(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    win.open_settings(0)
+    panel = win.settings_panel
+    panel.language.setCurrentIndex(panel.language.findData("en"))
+    panel.save_profile()
+    QTest.qWait(30)
+    qapp.processEvents()
+    win.settings_dialog.done(0)
+    answer_dialogs.append(_new_client())
+    win.form.add_client_button.click()
+    new = _client_named(book, "Nouveau Client")
+    assert new["id"] in [row["id"] for row in win.clients_panel.table.model.rows]
+    win._finish_quit(None)
+
+
+# -- the rate follows the client's currency ------------------------------------
+def _usd_and_eur_clients(book: Any, form: Any) -> tuple[int, int]:
+    """Two clients, whatever the demo holds, and the form's list refreshed."""
+    usd = book.clients.add(name="Client Dollar", currency="USD")
+    eur = book.clients.add(name="Client Euro", currency="EUR")
+    form.reload()
+    return usd, eur
+
+
+def _select(form: Any, client_id: int) -> None:
+    form.client.setCurrentIndex(form.client.findData(client_id))
+
+
+def test_leaving_a_euro_client_doesnt_keep_the_rate_of_1(book, demo, qapp, tmp_path):
+    """Found on screen: 100 USD read as 100 EUR, ready to be recorded."""
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    usd, eur = _usd_and_eur_clients(book, form)
+    _select(form, eur)
+    assert (form.rate.text(), form.rate.isEnabled()) == ("1", False)
+    form.gross.setText("100")
+    assert form.eur_gross.text() == "€100.00"
+
+    _select(form, usd)
+    assert (form.rate.text(), form.rate.isEnabled()) == ("", True)
+    assert form.eur_gross.text() == ""            # no euro figure until there is a rate
+    assert form.gross.text() == "100"             # only the rate goes
+    win._finish_quit(None)
+
+
+def test_the_plus_button_doesnt_keep_the_rate_of_1_either(book, demo, qapp, tmp_path, answer_dialogs):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    answer_dialogs.append(_new_client("Client Euro", currency="EUR"))
+    win.form.add_client()
+    assert win.form.rate.text() == "1"
+    answer_dialogs.append(_new_client("Client Dollar", currency="USD"))
+    win.form.add_client()
+    assert (win.form.rate.text(), win.form.rate.isEnabled()) == ("", True)
+    win._finish_quit(None)
+
+
+def test_a_usd_payment_without_a_rate_is_refused(book, demo, qapp, tmp_path, monkeypatch, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    usd, eur = _usd_and_eur_clients(book, form)
+    monkeypatch.setattr(form, "_confirm", lambda _s: True)
+    _select(form, eur)
+    _select(form, usd)
+    entries = len(book.ledger.entries())
+    form.description.setText("Annotation")
+    form.gross.setText("100")
+    form.net.setText("90")
+    assert form.record() is None
+    assert len(warnings) == 1
+    assert len(book.ledger.entries()) == entries
+    win._finish_quit(None)
+
+
+def test_a_typed_rate_survives_anything_that_stays_in_the_same_currency(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    usd, _eur = _usd_and_eur_clients(book, form)
+    other = book.clients.add(name="Client Dollar Bis", currency="USD")
+    form.reload()
+    _select(form, usd)
+    form.rate.setText("1.0823")
+    _select(form, other)                          # another client in the same currency
+    assert form.rate.text() == "1.0823"
+    win.reload_all()                              # what follows every change in the app
+    assert form.rate.text() == "1.0823"
+    assert form.rate.isEnabled()
+    win._finish_quit(None)
+
+
+def test_a_rate_of_1_typed_for_a_usd_client_is_left_alone(book, demo, qapp, tmp_path):
+    """Only the 1 the form filled in itself goes away."""
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    usd, _eur = _usd_and_eur_clients(book, form)
+    _select(form, usd)
+    form.rate.setText("1")
+    win.reload_all()
+    assert form.rate.text() == "1"
+    win._finish_quit(None)
+
+
+def test_a_euro_client_keeps_its_rate_of_1_after_a_refresh(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    _usd, eur = _usd_and_eur_clients(book, form)
+    _select(form, eur)
+    win.reload_all()
+    assert (form.rate.text(), form.rate.isEnabled()) == ("1", False)
+    win._finish_quit(None)
+
+
+def test_changing_the_selected_clients_currency_updates_the_rate(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    _usd, eur = _usd_and_eur_clients(book, form)
+    _select(form, eur)
+    book.clients.update(eur, currency="USD")      # what the Clients tab does
+    win.on_records_changed()
+    assert (form.rate.text(), form.rate.isEnabled()) == ("", True)
+    win._finish_quit(None)
+
+
+def test_a_euro_payment_records_at_1_after_leaving_a_usd_client(book, demo, qapp, tmp_path, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    form = win.form
+    usd, eur = _usd_and_eur_clients(book, form)
+    monkeypatch.setattr(form, "_confirm", lambda _s: True)
+    _select(form, usd)
+    form.rate.setText("1.0823")
+    _select(form, eur)
+    form.description.setText("Annotation")
+    form.gross.setText("100")
+    form.net.setText("100")
+    entry = book.ledger.get(form.record())
+    assert entry["fx_rate"] == D(1)
+    assert entry["eur_gross"] == D(100)
+    win._finish_quit(None)
+
+
 # -- settings, behind the gear -------------------------------------------------
 def test_settings_is_no_longer_a_tab(book, demo, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
     assert win.tabs.indexOf(win.settings_panel) == -1
     titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
     assert "Settings" not in titles
-    assert win.tabs.count() == 7
+    assert win.tabs.count() == 8
     win._finish_quit(None)
 
 

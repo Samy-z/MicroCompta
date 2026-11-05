@@ -17,7 +17,8 @@ run.bat
 The first run builds `.venv`, installs what it needs, and makes shortcuts on the Desktop and
 in the Start Menu. Python 3.11 or later must be installed. At first launch, **Settings** opens
 on its own (later, it's the gear icon at the top right, next to Help). Enter your identity and
-start date, then add your client.
+start date, then add your client: on the **Clients** tab, or with the **+** button beside the
+client list in the payment form.
 
 To only build the environment, without opening the app:
 
