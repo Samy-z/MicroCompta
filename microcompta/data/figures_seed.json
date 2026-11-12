@@ -27,6 +27,7 @@
     {"key": "expert_review_trigger", "effective_from": "2026-01-01", "value": "50000", "unit": "eur", "label": "Suggest an expert-comptable consultation at this run-rate", "source": "Owner's own trigger, not a legal limit", "note": ""},
     {"key": "near_limit_ratio", "effective_from": "2026-01-01", "value": "0.80", "unit": "rate", "label": "Warn when a limit is this full", "source": "App display setting, not a legal limit", "note": ""},
 
+    {"key": "einvoice_reception_deadline", "effective_from": "2026-01-01", "value": "2026-09-01", "unit": "date", "label": "Receiving electronic invoices required from", "source": "https://www.economie.gouv.fr/tout-savoir-sur-la-facturation-electronique-pour-les-entreprises", "note": "Every business, whatever its size. Not done by this app."},
     {"key": "ereporting_deadline", "effective_from": "2026-01-01", "value": "2027-09-01", "unit": "date", "label": "E-reporting through a plateforme agréée", "source": "https://www.impots.gouv.fr/professionnel/je-decouvre-la-facturation-electronique", "note": "Not done by this app."},
     {"key": "vat_mention_tolerated_until", "effective_from": "2026-01-01", "value": "2027-12-31", "unit": "date", "label": "Art. 293 B reference tolerated on invoices until", "source": "https://entreprendre.service-public.gouv.fr/vosdroits/F23208", "note": "Re-read F23208 before this date and edit the mention in Settings if needed."},
 

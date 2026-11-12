@@ -164,7 +164,34 @@ def test_e_reporting_date_comes_from_the_figures(book):
 
 
 def test_without_a_start_date_only_the_fixed_items_appear(book):
-    assert set(by_key(build(book))) == {"ereporting", "vat_mention"}
+    assert set(by_key(build(book))) == {"ereporting", "vat_mention", "einvoice_reception"}
+
+
+def test_receiving_e_invoices_is_due_from_1_september_2026(book):
+    """economie.gouv.fr: every business must be able to receive them from that date."""
+    item = by_key(build(book, start_date=date(2026, 3, 2)))["einvoice_reception"]
+    assert item.due == date(2026, 9, 1)
+    assert not item.optional          # an obligation, so it goes overdue rather than passing
+
+
+def test_a_business_started_later_must_receive_them_from_its_first_day(book):
+    item = by_key(build(book, start_date=date(2026, 11, 2)))["einvoice_reception"]
+    assert item.due == date(2026, 11, 2)
+
+
+def test_the_reception_date_comes_from_the_figures(book):
+    book.figures.upsert("einvoice_reception_deadline", date(2026, 1, 1), "2026-10-01")
+    assert by_key(build(book))["einvoice_reception"].due == date(2026, 10, 1)
+
+
+def test_reception_shows_as_overdue_until_it_is_marked_done(book, identity):
+    identity.start_date = date(2026, 3, 2)
+    book.save_profile(identity)
+    today = date(2026, 11, 12)
+    status = lambda: next(i for i in book.deadlines.items(today) if i["key"] == "einvoice_reception")
+    assert status()["status"] == "overdue"
+    book.deadlines.set_done("einvoice_reception")
+    assert status()["done"] is True
 
 
 # -- status and reminders ----------------------------------------------------

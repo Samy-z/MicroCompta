@@ -138,6 +138,16 @@ def build_deadlines(profile: Profile, figures: Figures, today: date,
                  tr("F23208 says this reference is tolerated until this date. Re-read it and "
                     "update the mention in Settings if needed.")),
     ]
+    # An obligation from that date, or from the first day for a business started later.
+    reception = figures.date_value("einvoice_reception_deadline", on)
+    if profile.start_date and profile.start_date > reception:
+        reception = profile.start_date
+    items.append(Deadline(
+        "einvoice_reception", tr("Receiving electronic invoices through a plateforme agréée"), reception,
+        FILING, tr("Every business, micro-entrepreneurs included, must be able to receive electronic "
+                   "invoices through a plateforme agréée. A PDF sent by email isn't one. Mark this done "
+                   "once you have chosen your platform: this app doesn't receive them."),
+    ))
     start = profile.start_date
     if start is None:
         return sorted(items, key=lambda d: (d.sort_date, d.key))

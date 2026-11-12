@@ -126,8 +126,6 @@ GNU GPL v3 : voir le fichier [LICENSE](LICENSE).
 
 ## Prochaines étapes
 
-- Ajouter à la page Échéances l'obligation de recevoir les factures électroniques, en vigueur
-  depuis le 1er septembre 2026. La page ne cite aujourd'hui que l'échéance de 2027.
 - Essayer `run.sh` sur macOS ou Linux. Le script existe, mais personne ne l'a encore lancé.
 - Obtenir les réponses de l'URSSAF et du service des impôts aux questions encore ouvertes. Elles
   sont listées dans l'application, page Revue annuelle, et dans le

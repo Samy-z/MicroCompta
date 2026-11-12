@@ -88,4 +88,5 @@ def populate(book: Any, *, with_siren: bool = True) -> dict[str, Any]:
         )
 
     book.deadlines.set_done("acre:request")
+    book.deadlines.set_done("einvoice_reception")    # the demo business has chosen its platform
     return {"client": client, "invoices": ids, "first_seq": first_seq}
