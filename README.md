@@ -124,10 +124,12 @@ variable d'environnement `MICROCOMPTA_DATA_DIR` permet de choisir ce dossier.
 
 ## Licence
 
-GNU GPL v3 : voir le fichier [LICENSE](LICENSE).
+MIT : voir le fichier [LICENSE](LICENSE).
 
 ## Prochaines étapes
 
+- Tester l'import Stripe avec un vrai compte. Il n'a tourné que contre un faux Stripe dans les
+  tests, et il demande un compte Stripe qui permet de créer des clés API.
 - Essayer `run.sh` sur macOS ou Linux. Le script existe, mais personne ne l'a encore lancé.
 - Obtenir les réponses de l'URSSAF et du service des impôts aux questions encore ouvertes. Elles
   sont listées dans l'application, page Revue annuelle, et dans le
