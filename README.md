@@ -87,6 +87,7 @@ Windows dans [docs/raccourci-windows.md](docs/raccourci-windows.md).
 | [Guide d'utilisation](docs/guide.md) | Vous, au quotidien | Chaque page de l'application et comment corriger une erreur |
 | [Sauvegarde Google Drive](docs/sauvegarde-drive.md) | Vous, une fois, pour brancher Drive | Créer votre accès Google, ce qui est envoyé et où, restaurer |
 | [Glossaire](docs/glossaire.md) | Vous, quand un terme vous arrête | Chaque terme officiel employé par l'application, avec sa source |
+| [Confidentialité](docs/confidentialite.md) | Vous, et Google pour l'accès à Drive | Les données que l'application utilise, où elles vont, comment retirer l'accès |
 
 Pour signaler un problème ou poser une question, ouvrez une « issue » sur cette page GitHub,
 onglet « Issues ».

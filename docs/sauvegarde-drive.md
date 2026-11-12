@@ -15,26 +15,40 @@ permet à l'application de déposer des fichiers dans votre Drive. L'application
 votre mot de passe Google. Elle ne demande que l'autorisation `drive.file`, qui lui permet de voir
 uniquement les fichiers qu'elle a créés.
 
-Les noms de menus ci-dessous sont ceux de la console Google en anglais. Si elle s'affiche en
-français, ils sont traduits, par exemple « Bibliothèque » pour « Library ».
+Chaque étape renvoie directement à la bonne page de la console Google Cloud. Vérifiez en haut de
+la page que c'est bien votre projet MicroCompta qui est sélectionné.
 
-1. Ouvrez la [console Google Cloud](https://console.cloud.google.com/) et créez un projet, par
-   exemple « MicroCompta ».
-2. Dans « APIs & Services », puis « Library », activez « Google Drive API ».
-3. Dans « Google Auth Platform », indiquez le nom de l'application et votre adresse e-mail.
-   Choisissez l'audience « External ».
-4. Sur la page « Audience » de « Google Auth Platform », publiez l'application pour que son état
-   passe à « In production ». Tant qu'elle reste en « Testing », Google annule la connexion tous
-   les 7 jours, et la sauvegarde s'arrête jusqu'à ce que vous vous reconnectiez.
-5. Dans « Clients », choisissez « Create client », de type « Desktop app », puis téléchargez le
-   fichier JSON proposé.
-6. Dans MicroCompta, page Sauvegarde, cliquez sur « Choisir le fichier client… » et choisissez ce
+1. [Créez un projet](https://console.cloud.google.com/projectcreate), par exemple « MicroCompta ».
+2. [Activez Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+   pour ce projet.
+3. [Configurez Google Auth Platform](https://console.cloud.google.com/auth/overview/create) :
+   indiquez le nom de l'application, une adresse e-mail d'assistance, l'audience « Externe » et
+   une adresse de contact.
+4. Sur la page [Branding](https://console.cloud.google.com/auth/branding), renseignez la page
+   d'accueil de l'application et le lien vers ses règles de confidentialité. Pour MicroCompta, la
+   page d'accueil est l'adresse de la page GitHub du projet, et les règles de confidentialité sont
+   la page [docs/confidentialite.md](confidentialite.md) de ce même projet sur GitHub. Si la
+   console vous demande d'ajouter leur domaine aux domaines autorisés, ajoutez `github.com`.
+   Enregistrez.
+5. Sur la page [Audience](https://console.cloud.google.com/auth/audience), cliquez sur « Publier
+   l'application » et confirmez : l'état passe de « Test » à « En production ». Le bouton reste
+   grisé tant que l'étape 4 n'est pas faite. MicroCompta ne demande qu'une autorisation que
+   Google ne classe pas comme sensible, donc la validation de l'application par Google n'est pas
+   obligatoire.
+6. [Créez un client](https://console.cloud.google.com/auth/clients/create) de type « Application
+   de bureau », puis téléchargez le fichier JSON proposé.
+7. Dans MicroCompta, page Sauvegarde, cliquez sur « Choisir le fichier client… » et choisissez ce
    fichier JSON. Cliquez ensuite sur « Se connecter avec Google ».
 
-Votre navigateur s'ouvre sur la page de connexion Google. Comme votre application n'est pas
-vérifiée par Google, un avertissement peut apparaître : il concerne l'application que vous venez
-de créer vous-même. Ouvrez le lien des paramètres avancés, puis celui qui mène à votre
-application. Sur l'écran suivant, cochez la case qui autorise l'accès à Drive.
+Votre navigateur s'ouvre sur la page de connexion Google. Choisissez votre compte, puis autorisez
+l'accès à Drive.
+
+Si Google affiche « Accès bloqué : MicroCompta n'a pas terminé la procédure de validation de
+Google » avec l'erreur 403, l'application est encore à l'état « Test ». Dans cet état, seules les
+adresses listées dans « Utilisateurs tests », sur la page Audience, peuvent se connecter. Publier
+l'application règle le problème. Ajouter votre adresse aux utilisateurs tests permet aussi
+d'essayer tout de suite, mais Google annule alors la connexion 7 jours après chaque autorisation,
+et la sauvegarde s'arrête jusqu'à la suivante.
 
 Après la connexion, Google remet un jeton, une clé que l'application présente à chaque envoi.
 L'application garde une copie de ce jeton et du fichier client dans
@@ -43,7 +57,9 @@ accès à votre session Windows peut lire ce dossier, comme vos autres fichiers.
 téléchargé peut ensuite être supprimé.
 
 « Se déconnecter » oublie le jeton sur cet ordinateur et ne change rien dans Drive. Pour retirer
-définitivement l'accès de l'application, passez par la page de sécurité de votre compte Google.
+définitivement l'accès de l'application, passez par la page
+[Applications tierces](https://myaccount.google.com/connections) de votre compte Google. Les
+[règles de confidentialité](confidentialite.md) détaillent ce que l'application fait de cet accès.
 
 Une fois branché, ouvrez dans Drive un des fichiers envoyés pour vérifier qu'il s'ouvre bien. La
 liste de contrôle de la page Revue annuelle vous le redemande chaque année.
