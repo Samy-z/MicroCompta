@@ -4,7 +4,7 @@
 option, but this documentation is in French because the rules it follows are French.*
 
 Un micro-entrepreneur doit tenir le livre des recettes, c'est-à-dire la liste datée de tout ce
-qu'il encaisse. Il émet des factures numérotées sans trou, surveille plusieurs seuils de chiffre
+qu'il encaisse. Il émet des factures, surveille plusieurs seuils de chiffre
 d'affaires et déclare à l'URSSAF, l'organisme qui collecte ses cotisations sociales, tous les mois
 ou tous les trimestres. MicroCompta tient ces registres sur votre ordinateur, sans abonnement. Il
 calcule les cotisations à prévoir, vous rappelle les échéances et range une copie de chaque
@@ -125,7 +125,7 @@ GNU GPL v3 : voir le fichier [LICENSE](LICENSE).
 
 ## Prochaines étapes
 
-- Brancher Google Drive avec un vrai compte. La connexion et l'envoi n'ont été essayés que contre
+- Tester Google Drive avec un vrai compte. La connexion et l'envoi n'ont été essayés que contre
   un faux Drive dans les tests.
 - Ajouter à la page Échéances l'obligation de recevoir les factures électroniques, en vigueur
   depuis le 1er septembre 2026. La page ne cite aujourd'hui que l'échéance de 2027.
@@ -133,5 +133,3 @@ GNU GPL v3 : voir le fichier [LICENSE](LICENSE).
 - Obtenir les réponses de l'URSSAF et du service des impôts aux questions encore ouvertes. Elles
   sont listées dans l'application, page Revue annuelle, et dans le
   [guide](docs/guide.md#ce-qui-reste-à-confirmer).
-- Faire relire les termes employés par un expert-comptable. Ils viennent des textes officiels,
-  mais aucun professionnel ne les a encore vérifiés.

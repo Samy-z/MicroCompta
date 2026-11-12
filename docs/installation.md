@@ -7,25 +7,23 @@ apparaissent.
 ## Ce qu'il faut
 
 - **Windows 10 ou 11.** L'application a été utilisée sur Windows 11. Le script prévu pour macOS et
-  Linux n'a jamais été lancé.
+  Linux n'a jamais été testé.
 - **Python 3.11 ou plus récent.** Python est le langage dans lequel l'application est écrite. Elle
   a été utilisée avec Python 3.13. Le programme d'installation se télécharge sur
   [python.org](https://www.python.org/downloads/). Pendant l'installation, cochez la case
   « Add python.exe to PATH », qui permet à Windows de trouver Python.
-- **Une connexion internet**, le temps de la première installation.
 - **Environ 770 Mo d'espace disque.** C'est la taille mesurée sur une installation Windows 11
-  avec Python 3.13, dont 656 Mo pour PySide6, la bibliothèque qui dessine les fenêtres.
+  avec Python 3.13, dont 656 Mo pour PySide6, la bibliothèque qui dessine les fenêtres de l'application.
 
 ## Installer
 
-1. Sur la page GitHub du projet, celle où se trouve ce guide, cliquez sur le bouton vert « Code »,
+1. Sur la page GitHub du projet, cliquez sur le bouton « Code »,
    puis sur « Download ZIP ». Si vous utilisez git, vous pouvez aussi cloner le projet.
 2. Décompressez le fichier dans un dossier au chemin court, par exemple `C:\MicroCompta`. Un
    chemin trop long fait échouer l'installation de PySide6, qui contient des fichiers aux noms
    très longs. Le ZIP contient un dossier `MicroCompta-main` : c'est lui, le dossier de
    l'application.
-3. Ouvrez ce dossier et double-cliquez sur `run.bat`. Si Windows masque les extensions, le fichier
-   s'appelle `run` et son type est « Fichier de commandes Windows ».
+3. Ouvrez ce dossier et double-cliquez sur `run.bat`.
 4. Windows peut vous demander confirmation, car le fichier vient d'internet. S'il affiche
    « Windows a protégé votre ordinateur », cliquez sur « Informations complémentaires », puis sur
    « Exécuter quand même ». S'il demande « Voulez-vous exécuter ce fichier ? », cliquez sur
@@ -33,8 +31,8 @@ apparaissent.
 
 Une fenêtre noire s'ouvre et affiche la progression. Le script crée d'abord un environnement
 virtuel dans le sous-dossier `.venv`, c'est-à-dire une copie de Python réservée à MicroCompta.
-Il y télécharge et installe ensuite les bibliothèques nécessaires, ce qui prend plusieurs
-minutes selon votre connexion. Il crée enfin les raccourcis, puis ouvre l'application.
+Il y télécharge et installe ensuite les bibliothèques nécessaires, ce qui peut prendre plusieurs
+minutes selon votre connexion. Il crée les raccourcis, puis ouvre l'application.
 
 Les lancements suivants passent directement à l'ouverture. Si l'installation a été interrompue,
 elle reprend au prochain lancement au lieu d'ouvrir une application incomplète.
