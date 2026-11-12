@@ -20,6 +20,7 @@ from ...i18n import fmt_date, tr
 from ..models import Col, fmt_value
 from ..widgets.table_view import DataTable
 from .common import (
+    FittedDialog,
     Banner, StatRow, bubble, button_box, fill_years, form_row, from_qdate, guarded, heading,
     make_date_edit, run_export, year_combo,
 )
@@ -31,28 +32,28 @@ def _columns() -> list[Col]:
         Col("received_on", tr("Received"), "date", 84, tip=tr("The day the money arrived. Turnover counts on this date.")),
         Col("client_name", tr("Client (origin)"), width=125, tip=tr("Who paid, as recorded at the time.")),
         Col("description", tr("Description"), width=150, tip=tr("What the payment was for.")),
-        Col("amount_gross", tr("Gross"), "money", 76, currency_key="currency",
+        Col("amount_gross", tr("Gross"), "money", 84, currency_key="currency",
             tip=tr("What the client paid, in the client's currency, before any fee.")),
         Col("fx_rate", tr("Rate"), "rate", 56, tip=tr("Units of the currency for 1 EUR, on this entry.")),
         Col("eur_gross", tr("EUR gross"), "eur", 76, tip=tr("Gross divided by the rate.")),
-        Col("fee_amount", tr("Fee"), "money", 58, currency_key="fee_currency",
+        Col("fee_amount", tr("Fee"), "money", 64, currency_key="fee_currency",
             tip=tr("What the provider kept, in the currency recorded.")),
         Col("net_credited", tr("Net credited"), "money", 88, currency_key="net_currency",
             tip=tr("What reached your account.")),
         Col("counted", tr("Counted"), "eur", 76,
             tip=tr("What this entry adds to turnover under the current setting.")),
-        Col("set_aside", tr("Set aside"), "eur", 126,
+        Col("set_aside", tr("Set aside"), "eur", 134,
             tip=tr("Contributions on this payment, at the rate in force on its date.")),
-        Col("method_shown", tr("Method"), width=62, tip=tr("How the money arrived.")),
+        Col("method_shown", tr("Method"), width=68, tip=tr("How the money arrived.")),
         Col("provider_ref", tr("Reference"), width=80, tip=tr("The provider's own reference.")),
         Col("linked_invoice", tr("Invoice"), width=92,
             tip=tr("The invoice this payment is on, and any credit note that cancelled it.")),
-        Col("receipts", tr("Receipts"), "int", 78, tip=tr("How many files are attached to this entry.")),
+        Col("receipts", tr("Receipts"), "int", 84, tip=tr("How many files are attached to this entry.")),
         Col("note", tr("Note"), width=180, tip=tr("Shows when an entry was reversed, or what a reversal cancels.")),
     ]
 
 
-class ReverseDialog(QDialog):
+class ReverseDialog(FittedDialog):
     def __init__(self, entry: dict[str, Any], parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle(tr("Reverse entry {seq}", seq=entry["seq"]))
@@ -87,7 +88,7 @@ class LedgerPanel(QWidget):
         self.book = book
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(7)
 
         top = QHBoxLayout()

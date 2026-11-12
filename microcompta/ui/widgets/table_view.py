@@ -36,12 +36,13 @@ class DataTable(QWidget):
         # setSortingEnabled sorts straight away on column 0, descending. Each panel supplies
         # its rows in the order that means something; a click on a header re-sorts them.
         self.table.sortByColumn(-1, Qt.AscendingOrder)
-        self.table.setAlternatingRowColors(True)
+        self.table.setAlternatingRowColors(False)
+        self.table.setShowGrid(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(23)
+        self.table.verticalHeader().setDefaultSectionSize(30)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.setStretchLastSection(True)
@@ -52,7 +53,7 @@ class DataTable(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
+        layout.setSpacing(8)
 
         self.bar = QHBoxLayout()
         self.bar.setSpacing(6)
@@ -61,7 +62,7 @@ class DataTable(QWidget):
         if toolbar:
             if title:
                 label = QLabel(title)
-                label.setObjectName("h1")
+                label.setObjectName("h2")
                 if title_tip:
                     label.setToolTip(wrap_tip(title_tip))
                 self.bar.addWidget(label)

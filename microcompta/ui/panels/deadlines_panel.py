@@ -55,7 +55,7 @@ class DeadlinesPanel(QWidget):
         self.book = book
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(7)
         layout.addWidget(heading(tr("Deadlines"), tr(
             "Worked out from your start date. The app reminds; the filing itself happens on URSSAF's "

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWi
 
 from ...i18n import tr
 from ..models import wrap_tip
-from ..theme import ACCENT, BG_ALT, BG_RAISED, BORDER, FG, FG_DIM
+from ..theme import ACCENT, LINE, SURFACE_1, SURFACE_2, TEXT, TEXT_3
 
 STRIP_WIDTH = 30
 
@@ -55,13 +55,13 @@ class CollapsedStrip(QWidget):
     def paintEvent(self, event: Any) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor(BG_ALT if self._hover else BG_RAISED))
+        painter.fillRect(self.rect(), QColor(SURFACE_2 if self._hover else SURFACE_1))
 
-        painter.setPen(QPen(QColor(ACCENT if self._hover else BORDER), 1))
+        painter.setPen(QPen(QColor(ACCENT if self._hover else LINE), 1))
         edge = self.width() - 1
         painter.drawLine(edge, 0, edge, self.height())
 
-        painter.setPen(QPen(QColor(ACCENT if self._hover else FG_DIM), 1.6))
+        painter.setPen(QPen(QColor(ACCENT if self._hover else TEXT_3), 1.6))
         cx, cy = self.width() / 2, 14
         painter.drawLine(cx - 2.5, cy - 3, cx + 2.5, cy)
         painter.drawLine(cx + 2.5, cy, cx - 2.5, cy + 3)
@@ -71,7 +71,7 @@ class CollapsedStrip(QWidget):
         font.setBold(True)
         font.setLetterSpacing(QFont.AbsoluteSpacing, 1.6)
         painter.setFont(font)
-        painter.setPen(QColor(FG if self._hover else FG_DIM))
+        painter.setPen(QColor(TEXT if self._hover else TEXT_3))
         painter.translate(self.width() / 2.0, self.height() / 2.0)
         painter.rotate(-90)
         painter.drawText(
@@ -91,7 +91,7 @@ class DockTitleBar(QWidget):
         super().__init__(parent)
         self.setObjectName("dockTitle")
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 4, 4, 4)
+        layout.setContentsMargins(14, 10, 8, 10)
         layout.setSpacing(6)
 
         label = QLabel(title)

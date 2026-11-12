@@ -20,6 +20,9 @@ on its own (later, it's the gear icon at the top right, next to Help). Enter you
 start date, then add your client: on the **Clients** tab, or with the **+** button beside the
 client list in the payment form.
 
+The pages are in the rail on the left. Ctrl+1 to Ctrl+8 open them in order, Ctrl+B folds the
+payment panel away, Ctrl+, opens Settings and F1 the help.
+
 To only build the environment, without opening the app:
 
 ```bash
@@ -138,6 +141,14 @@ keyboard. A test fails if a button, field, number or column has no bubble.
 **Settings > Figures**, with its source. To change one over time, add a row with a later date.
 Seed values are in `microcompta/data/figures_seed.json` and never overwrite an edit. Sources were
 last checked on 2026-11-04, and a yearly reminder asks you to re-check them.
+
+## Look
+
+A dark theme built from named tokens in `microcompta/ui/theme.py`: surfaces, text levels, one
+accent, status colours, radii and type. `tests/test_theme.py` checks every text colour against
+WCAG AA contrast (4.5:1) on every surface it can sit on, and fails on a colour that isn't a token.
+Headings and figures use Segoe UI Variable Display where Windows 11 has it, and fall back to
+Segoe UI or Inter.
 
 ## Language
 

@@ -9,7 +9,7 @@ from PySide6.QtCore import QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-from ..theme import BG, BORDER, FG, FG_DIM, LEVEL_COLOURS
+from ..theme import FG_DIM, LEVEL_COLOURS, SURFACE_2, TEXT, TEXT_3
 
 
 class ThresholdBar(QWidget):
@@ -50,19 +50,18 @@ class ThresholdBar(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         scale = self._scale()
         width = self.width() - 2
-        y, height = 6.0, 10.0
+        y, height = 7.0, 8.0
         track = QRectF(1, y, width, height)
 
-        painter.setPen(QPen(QColor(BORDER), 1))
-        painter.setBrush(QColor(BG))
-        painter.drawRoundedRect(track, 4, 4)
         painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(SURFACE_2))
+        painter.drawRoundedRect(track, 4, 4)
 
         colour = QColor(LEVEL_COLOURS.get(self._level, FG_DIM))
         value_w = max(0.0, width * max(float(self._value), 0.0) / scale)
         if self._projection is not None and self._projection > self._value:
             faint = QColor(colour)
-            faint.setAlpha(55)
+            faint.setAlpha(70)
             painter.setBrush(faint)
             painter.drawRoundedRect(QRectF(1, y, width * float(self._projection) / scale, height), 4, 4)
         if value_w > 0:
@@ -71,10 +70,10 @@ class ThresholdBar(QWidget):
 
         for tick in self._ticks:
             x = 1 + width * float(tick) / scale
-            painter.setPen(QPen(QColor(FG_DIM), 1.2))
-            painter.drawLine(int(x), 3, int(x), 19)
+            painter.setPen(QPen(QColor(TEXT_3), 1.4, Qt.SolidLine, Qt.RoundCap))
+            painter.drawLine(int(x), 4, int(x), 18)
         if self._limit > 0:
             x = 1 + width * float(self._limit) / scale
-            painter.setPen(QPen(QColor(FG), 2))
-            painter.drawLine(int(x), 1, int(x), 21)
+            painter.setPen(QPen(QColor(TEXT), 2, Qt.SolidLine, Qt.RoundCap))
+            painter.drawLine(int(x), 2, int(x), 20)
         painter.end()

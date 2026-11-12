@@ -8,7 +8,7 @@ from typing import Any, Callable, Iterable
 from PySide6.QtCore import QDate, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QCalendarWidget, QComboBox, QDateEdit, QDialogButtonBox, QFormLayout, QFrame, QHBoxLayout,
+    QCalendarWidget, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLayout,
     QMessageBox, QScrollArea, QSizePolicy, QToolTip, QVBoxLayout, QWidget,
 )
@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from ...core.errors import IssueBlocked, MicroComptaError
 from ...i18n import date_input_format, tr
 from ..models import wrap_tip
-from ..theme import FG, FG_DIM, LEVEL_COLOURS
+from ..theme import FG, FG_DIM, LEVEL_COLOURS, SURFACE_1, mix, soft
 
 
 def bubble(widget: QWidget, text: str, name: str = "") -> QWidget:
@@ -56,23 +56,30 @@ class _BubbleOnFocus:
 
 
 class StatCard(_BubbleOnFocus, QFrame):
-    """One headline number with a caption underneath."""
+    """One headline number and its caption.
 
-    def __init__(self, label: str, tip: str, parent: QWidget | None = None):
+    "card" stands alone in a row, with the caption underneath. The others sit inside a
+    larger tile, with the caption above: "hero" for the one number that matters most,
+    "large" for a tile's own number, "small" for the numbers that support it.
+    """
+
+    _VALUE_NAMES = {"card": "metricValue", "hero": "heroValue", "large": "tileValue", "small": "subValue"}
+
+    def __init__(self, label: str, tip: str, parent: QWidget | None = None, size: str = "card"):
         super().__init__(parent)
-        self.setObjectName("card")
-        self.setMinimumWidth(112)
+        self.setObjectName("card" if size == "card" else "subMetric")
+        self.setMinimumWidth(112 if size == "card" else 0)
         self.setFocusPolicy(Qt.TabFocus)
         self._label = label
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 7, 10, 7)
-        lay.setSpacing(1)
+        lay.setContentsMargins(*((12, 8, 12, 8) if size == "card" else (2, 2, 2, 2)))
+        lay.setSpacing(1 if size == "card" else 3)
         self.value = QLabel("—")
-        self.value.setObjectName("metricValue")
+        self.value.setObjectName(self._VALUE_NAMES[size])
         self.caption = QLabel(label)
-        self.caption.setObjectName("metricLabel")
-        lay.addWidget(self.value)
-        lay.addWidget(self.caption)
+        self.caption.setObjectName("metricLabel" if size == "card" else "eyebrow")
+        for widget in ((self.value, self.caption) if size == "card" else (self.caption, self.value)):
+            lay.addWidget(widget)
         bubble(self, tip, label)
 
     def set_tip(self, text: str) -> None:
@@ -137,8 +144,8 @@ class Chip(QLabel):
     def set_level(self, level: str) -> None:
         colour = LEVEL_COLOURS.get(level, FG_DIM)
         self.setStyleSheet(
-            f"color: {colour}; border: 1px solid {colour}; border-radius: 9px;"
-            "padding: 1px 9px; background: transparent; font-size: 11px;"
+            f"color: {colour}; background: {soft(colour)}; border: none; border-radius: 10px;"
+            "padding: 3px 10px; font-size: 11px; font-weight: 600;"
         )
 
 
@@ -165,13 +172,33 @@ class Banner(QFrame):
         self.setVisible(bool(text))
 
     def set_level(self, level: str) -> None:
-        self.edge.setStyleSheet(f"background: {LEVEL_COLOURS.get(level, FG_DIM)}; border: none;")
+        colour = LEVEL_COLOURS.get(level, FG_DIM)
+        self.edge.setStyleSheet(f"background: {colour}; border: none; border-radius: 1px;")
+        self.setStyleSheet(
+            f"QFrame#banner {{ background: {soft(colour, SURFACE_1)}; border: 1px solid {mix(colour, SURFACE_1, 0.35)}; }}"
+        )
 
     def show_text(self, text: str, level: str | None = None) -> None:
         if level:
             self.set_level(level)
         self.label.setText(text)
         self.setVisible(bool(text))
+
+
+class FittedDialog(QDialog):
+    """A dialog that opens at the height its wrapped lines need.
+
+    Qt leaves a wrapped label's second line out of a window's minimum height, so the rows above
+    it were squeezed: the client window's address box overlapped the country field by 10 px.
+    """
+
+    def showEvent(self, event: Any) -> None:  # noqa: N802
+        layout = self.layout()
+        if layout is not None and layout.hasHeightForWidth():
+            needed = layout.totalHeightForWidth(self.width())
+            if self.height() < needed:
+                self.resize(self.width(), needed)
+        super().showEvent(event)
 
 
 def button_box(standard: Any, accept: Callable[[], Any], reject: Callable[[], Any]) -> QDialogButtonBox:

@@ -6,7 +6,7 @@ from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QGridLayout, QHBoxLayout, QLabel, QSplitter, QVBoxLayout, QWidget,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QSplitter, QVBoxLayout, QWidget,
 )
 
 from ...core import clock
@@ -21,7 +21,7 @@ from ..theme import BAD, GOOD, WARN
 from ..widgets.table_view import DataTable
 from ..widgets.threshold_bar import ThresholdBar
 from .common import (
-    Banner, Chip, StatRow, _BubbleOnFocus, bubble, card_frame, dim_label, fill_years, heading,
+    Banner, Chip, StatCard, _BubbleOnFocus, bubble, card_frame, dim_label, fill_years, heading,
     scroll_page, year_combo,
 )
 
@@ -38,8 +38,8 @@ class LimitCardWidget(_BubbleOnFocus, QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
         lay = QVBoxLayout(frame)
-        lay.setContentsMargins(12, 9, 12, 10)
-        lay.setSpacing(4)
+        lay.setContentsMargins(16, 12, 16, 12)
+        lay.setSpacing(5)
 
         top = QHBoxLayout()
         self.title = heading("", object_name="h2")
@@ -97,6 +97,67 @@ class LimitCardWidget(_BubbleOnFocus, QWidget):
         self.setAccessibleName(f"{card.title}: {card.headline}")
 
 
+class KpiBoard(QWidget):
+    """The year at a glance, as tiles of different sizes: the number that matters most is the
+    biggest. Each number keeps its own card, caption and bubble, reached by key as in StatRow."""
+
+    def __init__(self, specs: dict[str, tuple[str, str]], parent: QWidget | None = None):
+        super().__init__(parent)
+        self.cards: dict[str, StatCard] = {}
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(12)
+
+        hero, lay = self._tile()
+        lay.addWidget(self._card(specs, "ytd", "hero"))
+        row = QHBoxLayout()
+        row.setSpacing(28)
+        for key in ("projection", "ceiling_pct", "base"):
+            row.addWidget(self._card(specs, key, "small"))
+        row.addStretch(1)
+        lay.addLayout(row)
+        lay.addStretch(1)
+
+        contributions, lay = self._tile()
+        lay.addWidget(self._card(specs, "set_aside", "large"))
+        lay.addWidget(self._card(specs, "rate", "small"))
+        lay.addStretch(1)
+
+        upcoming, lay = self._tile()
+        lay.addWidget(self._card(specs, "next", "large"))
+        self.next_note = QLabel("")
+        self.next_note.setObjectName("tileNote")
+        self.next_note.setWordWrap(True)
+        bubble(self.next_note, tr("What is due on that date. The full list is on the Deadlines tab."))
+        lay.addWidget(self.next_note)
+        lay.addStretch(1)
+
+        grid.addWidget(hero, 0, 0)
+        grid.addWidget(contributions, 0, 1)
+        grid.addWidget(upcoming, 0, 2)
+        grid.setColumnStretch(0, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+
+    @staticmethod
+    def _tile() -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("tile")
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(18, 12, 18, 12)
+        lay.setSpacing(10)
+        return frame, lay
+
+    def _card(self, specs: dict[str, tuple[str, str]], key: str, size: str) -> StatCard:
+        label, tip = specs[key]
+        card = StatCard(label, tip, size=size)
+        self.cards[key] = card
+        return card
+
+    def set(self, key: str, text: str, colour: str | None = None) -> None:
+        self.cards[key].set_text(text, colour)
+
+
 class DashboardPanel(QWidget):
     def __init__(self, book: Book, parent: QWidget | None = None):
         super().__init__(parent)
@@ -104,8 +165,8 @@ class DashboardPanel(QWidget):
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 14, 20, 14)
+        layout.setSpacing(12)
 
         top = QHBoxLayout()
         top.addWidget(heading(tr("Limits"), tr(
@@ -124,7 +185,7 @@ class DashboardPanel(QWidget):
         self.problem_banner = Banner("bad", tip=tr("A rate or limit is missing for this date."))
         layout.addWidget(self.problem_banner)
 
-        self.stats = StatRow([
+        self.stats = KpiBoard(dict((key, (label, tip)) for key, label, tip in [
             ("ytd", tr("Year to date"), tr(
                 "Turnover received from 1 January to today, counted on the date each payment arrived."
             )),
@@ -146,11 +207,11 @@ class DashboardPanel(QWidget):
                 "For information: turnover less the flat allowance. Not a tax calculation."
             )),
             ("next", tr("Next deadline"), tr("The nearest date not yet marked done.")),
-        ])
+        ]))
         layout.addWidget(self.stats)
 
         grid = QGridLayout()
-        grid.setSpacing(8)
+        grid.setSpacing(12)
         self.cards = {
             "ceiling": LimitCardWidget(tr(
                 "The most turnover the micro regime allows per year, prorated by days of activity "
@@ -190,7 +251,7 @@ class DashboardPanel(QWidget):
                 tip=tr("The contribution rate in force for the payments of this period.")),
             Col("set_aside", tr("To set aside"), "eur", 110,
                 tip=tr("Turnover times the rate, payment by payment.")),
-            Col("entries", tr("Payments"), "int", 70, tip=tr("How many ledger entries this period holds.")),
+            Col("entries", tr("Payments"), "int", 78, tip=tr("How many ledger entries this period holds.")),
         ], title=tr("To set aside by period"),
            title_tip=tr("What to keep aside for each declaration."), key="label")
         self.upcoming = DataTable([
@@ -200,8 +261,8 @@ class DashboardPanel(QWidget):
             Col("status", tr("Status"), "status", 90,
                 tip=tr("Upcoming, due soon (within 14 days) or overdue.")),
         ], title=tr("Next deadlines"), title_tip=tr("The nearest dates, from the Deadlines tab."), key="key")
-        self.periods.layout().setContentsMargins(0, 0, 6, 0)
-        self.upcoming.layout().setContentsMargins(6, 0, 0, 0)
+        self.periods.layout().setContentsMargins(0, 0, 0, 0)
+        self.upcoming.layout().setContentsMargins(0, 0, 0, 0)
         splitter.addWidget(self.periods)
         splitter.addWidget(self.upcoming)
         splitter.setSizes([500, 620])
@@ -298,8 +359,10 @@ class DashboardPanel(QWidget):
             self.stats.cards["next"].set_tip(tr(
                 "The nearest date not yet marked done: {title}.", title=first["title"],
             ))
+            self.stats.next_note.setText(first["title"])
         else:
             self.stats.set("next", "—")
+            self.stats.next_note.setText("")
 
 
 __all__ = ["DashboardPanel", "fmt_number"]

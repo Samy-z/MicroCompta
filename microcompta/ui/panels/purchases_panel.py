@@ -25,6 +25,7 @@ from ...i18n import fmt_date, fmt_number, fmt_percent, tr
 from ..models import Col
 from ..widgets.table_view import DataTable
 from .common import (
+    FittedDialog,
     Banner, StatRow, button_box, dim_label, fill_years, form_row, from_qdate, guarded, heading,
     make_date_edit, run_export, year_combo,
 )
@@ -39,19 +40,19 @@ def _columns() -> list[Col]:
         Col("category_shown", tr("Category"), width=170, tip=tr(
             "What kind of expense it is. Fixed assets are counted apart."
         )),
-        Col("amount_eur", tr("Amount paid"), "eur", 92, tip=tr("What left your account, in euros, VAT included.")),
+        Col("amount_eur", tr("Amount paid"), "eur", 100, tip=tr("What left your account, in euros, VAT included.")),
         Col("share_shown", tr("Pro share"), width=70, tip=tr("The share used for the activity.")),
         Col("pro_amount", tr("Pro amount"), "eur", 92, tip=tr("The amount paid times the professional share.")),
         Col("method_shown", tr("Method"), width=100, tip=tr("How you paid.")),
         Col("piece_ref", tr("Document ref."), width=110, tip=tr(
             "The number of the invoice or receipt for this purchase."
         )),
-        Col("receipts", tr("Receipts"), "int", 76, tip=tr("How many files are attached to this entry.")),
+        Col("receipts", tr("Receipts"), "int", 84, tip=tr("How many files are attached to this entry.")),
         Col("note", tr("Note"), width=180, tip=tr("Shows when an entry was reversed, or what a reversal cancels.")),
     ]
 
 
-class PurchaseDialog(QDialog):
+class PurchaseDialog(FittedDialog):
     """Stays open on a refusal, so nothing typed is lost. ``seq`` holds the new entry."""
 
     def __init__(self, book: Book, parent: QWidget | None = None,
@@ -142,7 +143,7 @@ class PurchaseDialog(QDialog):
             super().accept()
 
 
-class ReversePurchaseDialog(QDialog):
+class ReversePurchaseDialog(FittedDialog):
     def __init__(self, entry: dict[str, Any], parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle(tr("Reverse entry {seq}", seq=entry["seq"]))
@@ -175,7 +176,7 @@ class PurchasesPanel(QWidget):
         self.book = book
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(7)
 
         top = QHBoxLayout()

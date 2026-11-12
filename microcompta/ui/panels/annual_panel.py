@@ -54,7 +54,7 @@ class AnnualPanel(QWidget):
 
         inner = QWidget()
         layout = QVBoxLayout(inner)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(8)
 
         top = QHBoxLayout()
@@ -103,7 +103,7 @@ class AnnualPanel(QWidget):
         ), "h2"))
         self.quarters = DataTable([
             Col("quarter_label", tr("Quarter"), width=90, tip=tr("A calendar quarter.")),
-            Col("entries", tr("Entries"), "int", 60, tip=tr("How many ledger entries it holds.")),
+            Col("entries", tr("Entries"), "int", 68, tip=tr("How many ledger entries it holds.")),
             Col("eur_gross", tr("EUR gross"), "eur", 100, tip=tr("Received, before fees, at each entry's rate.")),
             Col("fee_eur", tr("Fees"), "eur", 90, tip=tr("What the providers kept.")),
             Col("net_eur", tr("Net credited"), "eur", 100, tip=tr("What reached your account in euros.")),
@@ -116,7 +116,7 @@ class AnnualPanel(QWidget):
         ), "h2"))
         self.questions = DataTable([
             Col("topic", tr("Question"), width=190, tip=tr("What isn't settled.")),
-            Col("who", tr("Who answers"), width=92, tip=tr("Who to ask.")),
+            Col("who", tr("Who answers"), width=100, tip=tr("Who to ask.")),
             Col("status", tr("Status"), width=120, tip=tr("Where it stands.")),
             Col("detail", tr("Detail"), width=330, tip=tr("What is known, and what the app assumes.")),
         ], toolbar=False)

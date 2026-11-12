@@ -35,7 +35,7 @@ def _columns() -> list[Col]:
         Col("kind_shown", tr("Kind"), width=110, tip=tr("Invoice, receipt, export or database snapshot.")),
         Col("year", tr("Year"), width=56, tip=tr("Decides the folder in Drive: MicroCompta / year / kind.")),
         Col("size", tr("Size"), "bytes", 70, tip=tr("The size of the local file.")),
-        Col("attempts", tr("Tries"), "int", 46, tip=tr("Upload attempts so far.")),
+        Col("attempts", tr("Tries"), "int", 54, tip=tr("Upload attempts so far.")),
         Col("uploaded_at", tr("Uploaded"), "datetime", 118, tip=tr("When Drive confirmed the file, in local time.")),
         Col("next_attempt_at", tr("Next try"), "datetime", 118, tip=tr("When the next attempt is due, in local time.")),
         Col("last_error", tr("Last message"), width=340, tip=tr("Why the last attempt didn't finish.")),
@@ -47,7 +47,7 @@ STEPS = N_(
     "<b>Connecting takes about 10 minutes, once. You do this yourself in your own browser, so "
     "the app never sees your Google password.</b>"
     "<ol style='margin-left:-20px'>"
-    "<li>Go to <a style='color:#4f9cf9' href='https://console.cloud.google.com/'>"
+    "<li>Go to <a style='color:#79b0ff' href='https://console.cloud.google.com/'>"
     "console.cloud.google.com</a> and create a project.</li>"
     "<li>APIs &amp; Services &gt; Library: enable <b>Google Drive API</b>.</li>"
     "<li>Google Auth Platform: set the app name and your email, audience <b>External</b>.</li>"
@@ -78,7 +78,7 @@ class BackupPanel(QWidget):
         self._signing_in = False
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(7)
 
         top = QHBoxLayout()

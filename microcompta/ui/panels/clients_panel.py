@@ -18,10 +18,10 @@ from ...core.clients import EXCLUSION_LABEL
 from ...i18n import tr
 from ..models import Col
 from ..widgets.table_view import DataTable
-from .common import bubble, button_box, dim_label, form_row, guarded, heading
+from .common import FittedDialog, bubble, button_box, dim_label, form_row, guarded, heading
 
 
-class ClientDialog(QDialog):
+class ClientDialog(FittedDialog):
     def __init__(self, client: dict[str, Any] | None = None, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle(tr("Client"))
@@ -97,7 +97,7 @@ class ClientsPanel(QWidget):
         self.book = book
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(7)
         layout.addWidget(heading(tr("Clients"), tr("Who you invoice.")))
         self.table = DataTable([

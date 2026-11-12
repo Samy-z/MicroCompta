@@ -22,6 +22,7 @@ from ...i18n import fmt_number, fmt_rate, tr
 from ..models import Col, wrap_tip
 from ..widgets.table_view import DataTable
 from .common import (
+    FittedDialog,
     Banner, bubble, button_box, dim_label, form_row, from_qdate, guarded, heading, make_date_edit,
 )
 
@@ -33,7 +34,7 @@ def _list_columns() -> list[Col]:
         Col("status", tr("Status"), "status", 70, tip=tr("A draft can change. Once issued, it can't.")),
         Col("issue_date", tr("Issued"), "date", 84, tip=tr("The date printed on the document.")),
         Col("client_name", tr("Client"), width=170, tip=tr("Who it is for. An issued document keeps the details it was issued with.")),
-        Col("service_start", tr("Service from"), "date", 88, tip=tr("First day of the service covered.")),
+        Col("service_start", tr("Service from"), "date", 96, tip=tr("First day of the service covered.")),
         Col("service_end", tr("To"), "date", 84, tip=tr("Last day of the service covered.")),
         Col("total", tr("Total"), "money", 92, currency_key="currency", tip=tr("The total, in the invoice's currency.")),
         Col("fx_rate", tr("Rate"), "rate", 62, tip=tr("The ECB reference rate printed on the invoice: units of the currency for 1 EUR.")),
@@ -54,7 +55,7 @@ def _line_columns() -> list[Col]:
     ]
 
 
-class EditDraftDialog(QDialog):
+class EditDraftDialog(FittedDialog):
     """Service dates, notes, and each line's description, quantity and price."""
 
     def __init__(self, book: Book, invoice_id: int, parent: QWidget | None = None):
@@ -127,7 +128,7 @@ class EditDraftDialog(QDialog):
             self.accept()
 
 
-class IssueDialog(QDialog):
+class IssueDialog(FittedDialog):
     """Last step before a number is taken for good."""
 
     def __init__(self, book: Book, invoice: dict[str, Any], parent: QWidget | None = None):
@@ -204,7 +205,7 @@ class IssueDialog(QDialog):
             self.euro_value.clear()
 
 
-class CreditDialog(QDialog):
+class CreditDialog(FittedDialog):
     def __init__(self, number: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle(tr("Credit note for {number}", number=number))
@@ -232,7 +233,7 @@ class InvoicesPanel(QWidget):
         self.book = book
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(7)
 
         top = QHBoxLayout()

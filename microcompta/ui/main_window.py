@@ -7,10 +7,10 @@ import os
 from typing import Any, Callable
 
 from PySide6.QtCore import QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QGuiApplication, QIcon, QKeySequence, QPixmap
+from PySide6.QtGui import QAction, QColor, QGuiApplication, QIcon, QKeySequence, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QDockWidget, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QSizePolicy,
-    QStatusBar, QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
+    QStatusBar, QSystemTrayIcon, QToolBar, QVBoxLayout, QWidget,
 )
 
 from ..backup import oauth
@@ -23,7 +23,6 @@ from ..core.ledger_policy import UNCONFIRMED
 from ..core.open_questions import OPEN_QUESTIONS
 from ..i18n import current_language, tr
 from .language import apply_language
-from .models import wrap_tip
 from .panels.annual_panel import AnnualPanel
 from .panels.backup_panel import BackupPanel
 from .panels.clients_panel import ClientsPanel
@@ -35,14 +34,15 @@ from .panels.ledger_panel import LedgerPanel
 from .panels.payment_form import PaymentForm
 from .panels.purchases_panel import PurchasesPanel
 from .panels.settings_panel import SettingsDialog
-from .theme import STYLESHEET
+from .theme import STYLESHEET, TEXT_3
 from .tray import TrayController
 from .widgets.collapse import CollapsedStrip, DockTitleBar
+from .widgets.nav_rail import NavRail, PageStack
 from .workers import SignInWorker, UploadWorker
 
 log = logging.getLogger(__name__)
 
-BRAND_LOGO_HEIGHT = 68
+BRAND_LOGO_HEIGHT = 36
 
 QUEUE_TICK_MS = 60_000
 REMINDER_TICK_MS = 60 * 60_000
@@ -72,6 +72,10 @@ class MainWindow(QMainWindow):
         apply_language(book.profile().language)
         self.setWindowTitle("MicroCompta")
         self.setStyleSheet(STYLESHEET)
+        # Qt style sheets can't colour a placeholder, the palette can.
+        palette = QApplication.palette()
+        palette.setColor(QPalette.PlaceholderText, QColor(TEXT_3))
+        QApplication.setPalette(palette)
         self._size_to_primary_screen()
         self._apply_icon()
 
@@ -103,6 +107,16 @@ class MainWindow(QMainWindow):
         title.collapse_requested.connect(self.collapse_dock)
         self.payment_dock.setTitleBarWidget(title)
 
+        self.nav_bar = QToolBar("Navigation", self)
+        self.nav_bar.setObjectName("navBar")
+        self.nav_bar.setMovable(False)
+        self.nav_bar.setFloatable(False)
+        self.nav_bar.setContextMenuPolicy(Qt.PreventContextMenu)
+        self.nav_bar.toggleViewAction().setVisible(False)
+        self.rail = NavRail()
+        self.nav_bar.addWidget(self.rail)
+        self.addToolBar(Qt.LeftToolBarArea, self.nav_bar)
+
         self.strip_bar = QToolBar("Strip", self)
         self.strip_bar.setObjectName("controlsStripBar")
         self.strip_bar.setMovable(False)
@@ -125,22 +139,22 @@ class MainWindow(QMainWindow):
         self.annual_panel = AnnualPanel(self.book)
         self.backup_panel = BackupPanel(self.book, self.tokens)
 
-        self.tabs = QTabWidget()
-        for panel, label, tip in (
-            (self.dashboard_panel, tr("Limits"), tr("Your turnover against each legal limit, and what to set aside.")),
-            (self.ledger_panel, tr("Payments"), tr("The livre des recettes: every payment received, with totals every 3 months.")),
-            (self.purchases_panel, tr("Expenses"), tr(
+        self.tabs = PageStack(self.rail)
+        for panel, icon_name, label, tip in (
+            (self.dashboard_panel, "limits", tr("Limits"), tr("Your turnover against each legal limit, and what to set aside.")),
+            (self.ledger_panel, "payments", tr("Payments"), tr("The livre des recettes: every payment received, with totals every 3 months.")),
+            (self.purchases_panel, "expenses", tr("Expenses"), tr(
                 "The purchases register: what you buy for the activity. It changes neither turnover "
                 "nor contributions."
             )),
-            (self.clients_panel, tr("Clients"), tr("Who you invoice.")),
-            (self.invoices_panel, tr("Invoices"), tr("Drafts, issued invoices and credit notes.")),
-            (self.deadlines_panel, tr("Deadlines"), tr("Declarations and other dates, worked out from your start date.")),
-            (self.annual_panel, tr("Annual"), tr("The year's totals, the figure for your tax return, and a review checklist.")),
-            (self.backup_panel, tr("Backup"), tr("Whether each document has reached your Google Drive.")),
+            (self.clients_panel, "clients", tr("Clients"), tr("Who you invoice.")),
+            (self.invoices_panel, "invoices", tr("Invoices"), tr("Drafts, issued invoices and credit notes.")),
+            (self.deadlines_panel, "deadlines", tr("Deadlines"), tr("Declarations and other dates, worked out from your start date.")),
+            (self.annual_panel, "annual", tr("Annual"), tr("The year's totals, the figure for your tax return, and a review checklist.")),
+            (self.backup_panel, "backup", tr("Backup"), tr("Whether each document has reached your Google Drive.")),
         ):
-            index = self.tabs.addTab(panel, label)
-            self.tabs.setTabToolTip(index, wrap_tip(tip))
+            index = self.tabs.addTab(panel, label, icon_name)
+            self.tabs.setTabToolTip(index, tr("{tip} (Ctrl+{key})", tip=tip, key=index + 1))
 
         central = QWidget()
         central_lay = QVBoxLayout(central)
@@ -172,7 +186,7 @@ class MainWindow(QMainWindow):
     def _teardown_ui(self) -> None:
         self.settings_dialog.done(0)
         self.settings_dialog.deleteLater()
-        for bar in (self.strip_bar, self.brand_bar):
+        for bar in (self.nav_bar, self.strip_bar, self.brand_bar):
             self.removeToolBar(bar)
             bar.deleteLater()
         # The central widget is replaced by _build_ui, not removed here.
@@ -271,6 +285,7 @@ class MainWindow(QMainWindow):
         bar.setMovable(False)
         bar.setFloatable(False)
         bar.setIconSize(QSize(1, 1))
+        bar.setFixedHeight(BRAND_LOGO_HEIGHT + 16)
 
         logo = QLabel()
         logo.setObjectName("brandLogo")
@@ -282,7 +297,7 @@ class MainWindow(QMainWindow):
         else:
             logo.setText("MicroCompta")
             logo.setObjectName("h1")
-        logo.setContentsMargins(10, 4, 12, 4)
+        logo.setContentsMargins(8, 0, 12, 0)
         bubble(logo, tr("MicroCompta: personal accounting for a French micro-entrepreneur."), "MicroCompta")
         bar.addWidget(logo)
 
@@ -331,6 +346,13 @@ class MainWindow(QMainWindow):
         hint = self.size()
         self.settings_dialog.resize(max(int(hint.width() * 0.86), 900), max(int(hint.height() * 0.88), 600))
         self.settings_dialog.open()
+        # Then wide enough for the page's longest lines, measured once the fonts apply, but never
+        # wider than this window.
+        page = self.settings_panel.tabs.widget(0)
+        spare = page.viewport().width() - page.widget().minimumSizeHint().width()
+        if spare < 0:
+            width = min(self.settings_dialog.width() - spare, max(hint.width(), 900))
+            self.settings_dialog.resize(width, self.settings_dialog.height())
 
     # -- tray ---------------------------------------------------------------
     def _build_tray(self) -> None:
@@ -381,6 +403,16 @@ class MainWindow(QMainWindow):
             action.setShortcutContext(Qt.ApplicationShortcut)
             action.triggered.connect(lambda _c=False, run=slot: run())
             self.addAction(action)
+        for number in range(1, 10):
+            action = QAction(self)
+            action.setShortcut(QKeySequence(f"Ctrl+{number}"))
+            action.setShortcutContext(Qt.ApplicationShortcut)
+            action.triggered.connect(lambda _c=False, i=number - 1: self._go_to_page(i))
+            self.addAction(action)
+
+    def _go_to_page(self, index: int) -> None:
+        if not self._closed and 0 <= index < self.tabs.count():
+            self.tabs.setCurrentIndex(index)
 
     def _start_timers(self) -> None:
         """All periodic work runs from here, on the UI thread, in small steps."""
@@ -447,18 +479,17 @@ class MainWindow(QMainWindow):
 
     def _refresh_labels(self) -> None:
         overdue, soon = self.deadlines_panel.counts()
-        label = tr("Deadlines")
+        deadlines = self.tabs.indexOf(self.deadlines_panel)
         if overdue:
-            label += "  " + tr("({count} overdue)", count=overdue)
+            self.tabs.set_note(deadlines, tr("({count} overdue)", count=overdue), overdue, "bad")
         elif soon:
-            label += "  " + tr("({count} soon)", count=soon)
-        self.tabs.setTabText(self.tabs.indexOf(self.deadlines_panel), label)
+            self.tabs.set_note(deadlines, tr("({count} soon)", count=soon), soon, "warn")
+        else:
+            self.tabs.set_note(deadlines)
 
         stale = len(self.book.invoices.stale())
-        invoices = tr("Invoices")
-        if stale:
-            invoices += "  " + tr("({count} to correct)", count=stale)
-        self.tabs.setTabText(self.tabs.indexOf(self.invoices_panel), invoices)
+        self.tabs.set_note(self.tabs.indexOf(self.invoices_panel),
+                           tr("({count} to correct)", count=stale) if stale else "", stale, "warn")
 
         counts = self.book.queue.counts()
         state = self.tokens.state()
@@ -471,10 +502,9 @@ class MainWindow(QMainWindow):
         if counts["failed"]:
             text += ", " + tr("{count} failed", count=counts["failed"])
         self.backup_label.setText(text)
-        tab = tr("Backup")
-        if counts["failed"]:
-            tab += "  " + tr("({count} failed)", count=counts["failed"])
-        self.tabs.setTabText(self.tabs.indexOf(self.backup_panel), tab)
+        self.tabs.set_note(self.tabs.indexOf(self.backup_panel),
+                           tr("({count} failed)", count=counts["failed"]) if counts["failed"] else "",
+                           counts["failed"], "bad")
         if self.tray is not None:
             self.tray.set_status(tr("{overdue} overdue, {soon} soon. {backup}.",
                                     overdue=overdue, soon=soon, backup=text))

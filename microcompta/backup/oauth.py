@@ -35,7 +35,7 @@ SCOPE = "https://www.googleapis.com/auth/drive.file"
 
 _DONE_PAGE = (
     "<!doctype html><meta charset='utf-8'><title>MicroCompta</title>"
-    "<body style='font:15px system-ui;background:#14161c;color:#d7dce5;padding:48px'>"
+    "<body style='font:15px system-ui;background:#0d1016;color:#e9ecf2;padding:48px'>"
     "<h2>{title}</h2><p>{body}</p></body>"
 )
 

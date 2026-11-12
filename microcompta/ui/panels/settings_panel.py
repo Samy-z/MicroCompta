@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QHBoxLayout,
     QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QTabWidget, QVBoxLayout, QWidget,
@@ -24,6 +24,7 @@ from ...i18n import available_languages, current_language, fmt_date, fmt_money, 
 from ..models import Col, wrap_tip
 from ..widgets.table_view import DataTable
 from .common import (
+    FittedDialog,
     Banner, bubble, button_box, dim_label, form_row, from_qdate, guarded, heading, make_date_edit,
     scroll_page, to_qdate,
 )
@@ -39,7 +40,7 @@ def _unit_tip(unit: str) -> str:
     }.get(unit, "")
 
 
-class FigureDialog(QDialog):
+class FigureDialog(FittedDialog):
     """A new value from a date. Older dates keep the old value, so the past doesn't change."""
 
     def __init__(self, row: dict[str, Any], parent: QWidget | None = None):
@@ -243,7 +244,10 @@ class SettingsPanel(QWidget):
         self.save_button.clicked.connect(lambda _c=False: self.save_profile())
         save_row.addWidget(self.save_button)
         outer.addLayout(save_row)
-        return scroll_page(inner)
+        page = scroll_page(inner)
+        # On a narrow screen, scrolling sideways beats cutting the right column off.
+        page.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        return page
 
     def _check_siren(self, text: str) -> None:
         text = text.strip()

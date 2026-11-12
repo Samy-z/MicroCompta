@@ -40,6 +40,7 @@ from microcompta.ui.panels.purchases_panel import PurchaseDialog, ReversePurchas
 from microcompta.ui.panels.settings_panel import FigureDialog  # noqa: E402
 from microcompta.ui.widgets.table_view import DataTable  # noqa: E402
 from microcompta.ui.widgets.threshold_bar import ThresholdBar  # noqa: E402
+from microcompta.ui import theme  # noqa: E402
 from microcompta.ui.theme import STYLESHEET  # noqa: E402
 
 
@@ -1333,6 +1334,116 @@ def test_a_euro_payment_records_at_1_after_leaving_a_usd_client(book, demo, qapp
     win._finish_quit(None)
 
 
+# -- the layout: a navigation rail, tiles, a slimmer top bar ---------------------
+_PAGES_FR = ["Seuils", "Recettes", "Dépenses", "Clients", "Factures", "Échéances", "Revue annuelle", "Sauvegarde"]
+
+
+def test_the_rail_lists_every_page_in_order_with_its_icon(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    assert [b.text().replace("\n", " ") for b in win.rail.buttons] == _PAGES_FR
+    assert [win.tabs.tabText(i) for i in range(win.tabs.count())] == _PAGES_FR
+    assert all(not b.icon().isNull() for b in win.rail.buttons)
+    assert all(b.toolTip() and b.accessibleName() for b in win.rail.buttons)
+    win._finish_quit(None)
+
+
+def test_the_rail_and_the_pages_follow_each_other(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.rail.buttons[3].click()
+    assert win.tabs.currentWidget() is win.clients_panel
+    win.tabs.setCurrentWidget(win.invoices_panel)          # what the app itself does
+    assert win.rail.buttons[win.tabs.indexOf(win.invoices_panel)].isChecked()
+    assert sum(b.isChecked() for b in win.rail.buttons) == 1
+    win._finish_quit(None)
+
+
+@pytest.mark.parametrize("number, panel", [(1, "dashboard_panel"), (4, "clients_panel"), (8, "backup_panel")])
+def test_ctrl_and_a_number_opens_that_page(book, demo, qapp, tmp_path, number, panel):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.tabs.setCurrentIndex(2)
+    action = next(a for a in win.actions() if a.shortcut().toString() == f"Ctrl+{number}")
+    action.trigger()
+    assert win.tabs.currentWidget() is getattr(win, panel)
+    assert f"Ctrl+{number}" in win.tabs.tabToolTip(number - 1)
+    win._finish_quit(None)
+
+
+def test_ctrl_9_with_no_ninth_page_does_nothing(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.tabs.setCurrentIndex(2)
+    next(a for a in win.actions() if a.shortcut().toString() == "Ctrl+9").trigger()
+    assert win.tabs.currentIndex() == 2
+    win._finish_quit(None)
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_the_rail_sits_far_left_and_every_label_fits(book, demo, qapp, tmp_path, language):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language=language)
+    assert win.nav_bar.geometry().right() < win.payment_dock.geometry().left()
+    assert win.rail.width() <= 110
+    for button in win.rail.buttons:
+        for line in button.text().split("\n"):
+            assert button.fontMetrics().horizontalAdvance(line) <= button.width() - 8, line
+    win._finish_quit(None)
+
+
+def test_a_long_label_goes_on_two_lines_but_keeps_its_name(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    annual = win.tabs.indexOf(win.annual_panel)
+    assert win.rail.buttons[annual].text() == "Revue\nannuelle"
+    assert win.tabs.tabText(annual) == "Revue annuelle"
+    assert win.rail.buttons[annual].accessibleName() == "Revue annuelle"
+    win._finish_quit(None)
+
+
+def test_counts_show_as_badges_on_the_rail(book, demo, qapp, tmp_path, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    index = win.tabs.indexOf(win.deadlines_panel)
+    button = win.rail.buttons[index]
+    for counts, badge, level, text in (((2, 0), "2", "bad", "Deadlines  (2 overdue)"),
+                                       ((0, 3), "3", "warn", "Deadlines  (3 soon)"),
+                                       ((0, 0), "", None, "Deadlines")):
+        monkeypatch.setattr(win.deadlines_panel, "counts", lambda c=counts: c)
+        win._refresh_labels()
+        assert button.badge == badge
+        assert win.tabs.tabText(index) == text
+        assert button.accessibleName() == text
+        if level:
+            assert button._badge_level == level
+    win._finish_quit(None)
+
+
+def test_the_year_at_a_glance_keeps_every_number(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    stats = win.dashboard_panel.stats
+    assert set(stats.cards) == {"ytd", "projection", "ceiling_pct", "set_aside", "rate", "base", "next"}
+    assert stats.cards["ytd"].value.text() == "€15,303.49"
+    assert all(card.toolTip() for card in stats.cards.values())
+    sizes = {key: card.value.fontInfo().pixelSize() for key, card in stats.cards.items()}
+    assert sizes["ytd"] == max(sizes.values())               # the number that matters most is the biggest
+    assert sizes["ytd"] > sizes["set_aside"] > sizes["projection"]
+    first = next(i for i in book.deadlines.items() if i["status"] not in ("done", "passed") and i["due"])
+    assert stats.next_note.text() == first["title"]
+    win._finish_quit(None)
+
+
+def test_the_top_bar_is_slim(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    assert win.brand_bar.height() <= 56
+    win._finish_quit(None)
+
+
+def test_rebuilding_for_a_language_keeps_one_rail(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    win.tabs.setCurrentWidget(win.invoices_panel)
+    win.rebuild_for_language()
+    QTest.qWait(30)
+    rails = [bar for bar in win.findChildren(type(win.nav_bar)) if bar.objectName() == "navBar" and bar.isVisible()]
+    assert len(rails) == 1
+    assert win.rail.buttons[win.tabs.indexOf(win.invoices_panel)].isChecked()
+    win._finish_quit(None)
+
+
 # -- settings, behind the gear -------------------------------------------------
 def test_settings_is_no_longer_a_tab(book, demo, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
@@ -1727,7 +1838,7 @@ def test_a_long_bubble_is_a_comfortable_width_and_a_short_one_stays_on_one_line(
 def test_bubbles_are_dark_and_use_the_app_font_size(book, demo, qapp, tmp_path):
     win = make_window(book, qapp, state="no_client", tmp=tmp_path)
     tip = _shown_bubble(qapp, win.settings_button)
-    assert tip.grab().toImage().pixelColor(4, 4).name() == "#20242e"
+    assert tip.grab().toImage().pixelColor(6, 6).name() == theme.SURFACE_2
     assert tip.font().pixelSize() == 12
     QToolTip.hideText()
     win._finish_quit(None)
@@ -1743,8 +1854,10 @@ def test_every_bubble_is_rich_text_so_it_can_wrap():
 
 
 # -- look --------------------------------------------------------------------
-def test_theme_uses_the_same_tokens_as_polyclusters():
-    for token in ("#14161c", "#1a1d25", "#20242e", "#2c313d", "#4f9cf9", "#2d5c96"):
+def test_the_theme_paints_with_its_tokens():
+    """The palette left PolyClusters' for its own in the 2026 redesign; test_theme.py checks its contrast."""
+    for token in (theme.SURFACE_0, theme.SURFACE_1, theme.SURFACE_2, theme.LINE, theme.TEXT, theme.ACCENT,
+                  theme.ACCENT_FILL):
         assert token in STYLESHEET
 
 
@@ -1780,3 +1893,30 @@ def test_no_real_personal_data_in_the_repository():
             assert word not in lowered, f"{word} in {path}"
         assert not _IBAN.search(text), f"IBAN-like value in {path}"
         assert not _NIR.search(text), f"Social security number-like value in {path}"
+
+
+def test_the_settings_page_fits_its_dialog(book, demo, qapp, tmp_path):
+    """Found on screen: two long ticks pushed the right column past the dialog's edge."""
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    win.open_settings(0)
+    qapp.processEvents()
+    page = win.settings_panel.tabs.widget(0)
+    assert page.viewport().width() >= page.widget().minimumSizeHint().width()
+    assert win.settings_dialog.width() <= win.width()
+    win.settings_dialog.done(0)
+    win._finish_quit(None)
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_no_field_overlaps_the_next_in_the_client_window(book, demo, qapp, tmp_path, language):
+    """Found on screen: a wrapped line left out of the window's height squeezed the address box
+    over the country field."""
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language=language)
+    dialog = ClientDialog(parent=win)
+    dialog.show()
+    qapp.processEvents()
+    fields = [dialog.name, dialog.address, dialog.country, dialog.tax_id, dialog.email, dialog.currency]
+    for above, below in zip(fields, fields[1:]):
+        assert above.geometry().bottom() < below.geometry().top(), (above, below)
+    dialog.done(0)
+    win._finish_quit(None)
