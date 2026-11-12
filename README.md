@@ -1,203 +1,110 @@
 # MicroCompta
 
-A light personal accounting desktop app for a French micro-entrepreneur: the payments
-ledger, invoices, limits, deadlines, and a backup of every document to your own Google
-Drive. It works fully offline and catches up when it can.
+*In English: a desktop bookkeeping app for French micro-entrepreneurs. The app has an English
+option, but this documentation is in French because the rules it follows are French.*
 
-> **It reminds and adds up. It doesn't give tax advice**, it doesn't do e-reporting, and it
-> doesn't file anything with URSSAF. Open questions are listed in the app (Annual tab) and
-> [below](#still-open).
+Un micro-entrepreneur doit tenir le livre des recettes, c'est-à-dire la liste datée de tout ce
+qu'il encaisse. Il émet des factures numérotées sans trou, surveille plusieurs seuils de chiffre
+d'affaires et déclare à l'URSSAF, l'organisme qui collecte ses cotisations sociales, tous les mois
+ou tous les trimestres. MicroCompta tient ces registres sur votre ordinateur, sans abonnement. Il
+calcule les cotisations à prévoir, vous rappelle les échéances et range une copie de chaque
+document dans votre propre Google Drive.
 
-## Start
+L'application vise une activité libérale non réglementée, déclarée en bénéfices non commerciaux
+(BNC), ou une activité de prestation de services déclarée en bénéfices industriels et commerciaux
+(BIC). La vente de marchandises n'est pas prise en charge.
 
-```bash
-run.bat
-```
+![La page Seuils de MicroCompta, sur des données fictives](docs/images/apercu-seuils.png)
 
-The first run builds `.venv`, installs what it needs, and makes shortcuts on the Desktop and
-in the Start Menu. Python 3.11 or later must be installed. At first launch, **Settings** opens
-on its own (later, it's the gear icon at the top right, next to Help). Enter your identity and
-start date, then add your client: on the **Clients** tab, or with the **+** button beside the
-client list in the payment form.
+## Un exemple
 
-The pages are in the rail on the left. Ctrl+1 to Ctrl+8 open them in order, Ctrl+B folds the
-payment panel away, Ctrl+, opens Settings and F1 the help.
+Le 30 octobre 2026, un client américain vous paie 1 020 $ par Stripe. Stripe garde 29,88 $ de
+frais et vous recevez 910,26 € sur votre compte. Dans le volet « Saisir un encaissement », vous
+indiquez la date, le client, le montant brut, les frais et le net crédité. Vous ajoutez le taux
+de change du jour publié par la Banque centrale européenne : 1,0823 $ pour 1 €.
 
-To only build the environment, without opening the app:
+L'application calcule alors le brut en euros, 942,44 €, et les cotisations de ce paiement :
+180,95 €, au taux de 19,2 % qui s'appliquait ce jour-là à une activité libérale aidée par l'ACRE.
+L'ACRE est une réduction de cotisations accordée aux créateurs d'entreprise pendant leurs
+premiers trimestres. Le paiement s'ajoute au livre des recettes, au cumul de l'année et aux
+seuils, puis la sauvegarde part vers Drive.
 
-```bash
-run.bat --setup
-```
+Une écriture enregistrée ne se modifie plus. Une erreur se corrige par une écriture d'annulation
+motivée, comme le veut un registre comptable.
 
-If setup stops on a "long path" error, the folder is nested too deeply for one of PySide6's
-files. Move it somewhere shorter, or enable Windows long paths, and run it again. A failed
-setup is retried on the next run rather than opening a half-installed app.
+## Ce que fait l'application
 
-Reminders fire only while the app runs, so closing the window keeps it in the tray. Quit from
-the tray icon's menu. To have it start with Windows, once:
+- **Livre des recettes**, page Recettes : une écriture par encaissement, avec ses totaux
+  trimestriels et ses exports CSV et PDF.
+- **Registre des achats**, page Dépenses : vos dépenses professionnelles et leurs justificatifs.
+  Il est obligatoire pour une activité libérale en franchise en base de TVA, c'est-à-dire quand
+  vous ne facturez pas la TVA.
+- **Factures** : une facture récapitule les paiements déjà reçus d'un mois. L'application en
+  prépare le brouillon, puis émet la facture définitive au numéro suivant, en PDF. Une facture
+  émise se corrige par une facture d'avoir.
+- **Seuils** : votre chiffre d'affaires face au seuil du régime micro, aux seuils de la franchise
+  en base de TVA et au seuil du compte bancaire dédié, avec une projection sur l'année.
+- **Échéances** : les déclarations et autres dates calculées depuis votre date de début
+  d'activité, avec des rappels dans la zone de notification de Windows.
+- **Revue annuelle** : les totaux de l'année, le montant à reporter sur votre déclaration de
+  revenus et une liste de contrôle.
+- **Sauvegarde** : chaque document part dans votre Google Drive. Il ne compte comme envoyé que si
+  Drive renvoie la même empreinte, un résumé calculé à partir du contenu, que le fichier local.
 
-```bash
-.venv\Scripts\python.exe scripts\make_shortcut.py --startup
-```
+Chaque nombre, bouton et champ porte une bulle d'aide au survol de la souris. Les termes suivent
+la rédaction des textes officiels ; le [glossaire](docs/glossaire.md) donne chacun avec sa source.
 
-## Google Drive backup: connecting it
+## Ce qu'elle ne fait pas
 
-You do this once, in your own browser, in about 10 minutes. The app never sees your Google
-password. It asks only for the `drive.file` scope, so it can see only the files it created.
+- Elle ne donne pas de conseil fiscal. Elle additionne et rappelle, et vous restez responsable de
+  vos déclarations.
+- Elle ne déclare rien à l'URSSAF ni aux impôts : vous le faites sur leurs sites.
+- Elle ne gère pas la facturation électronique de la réforme en cours. Depuis le
+  1er septembre 2026, toute entreprise, micro-entreprise comprise, doit pouvoir recevoir des
+  factures électroniques par une plateforme agréée, un prestataire immatriculé par
+  l'administration. Les micro-entreprises devront aussi en émettre à partir du
+  1er septembre 2027. Les détails sont sur
+  [economie.gouv.fr](https://www.economie.gouv.fr/tout-savoir-sur-la-facturation-electronique-pour-les-entreprises).
+- Elle ne se connecte qu'à Google Drive. Le code qui parle à Drive n'a aucune commande de
+  suppression, et des tests vérifient qu'il refuse toute autre adresse que celles de Google.
 
-1. Go to <https://console.cloud.google.com/> and create a project, for example `MicroCompta`.
-2. **APIs & Services > Library**: enable **Google Drive API**.
-3. **Google Auth Platform**: set the app name and your email. Audience: **External**.
-4. **Publish the app, so its status is "In production".** This step matters. While the app is
-   in "Testing", Google cancels the sign-in every 7 days and the backup stops until you sign in
-   again. `drive.file` isn't a sensitive scope. If Google shows a warning screen when you sign
-   in, it's about your own app.
-5. **Clients > Create client**, type **Desktop app**. Download the JSON.
-6. In MicroCompta, **Backup** tab: **Choose client file...**, pick that JSON, then **Sign in with
-   Google**. Tick the Drive box on the consent screen.
+## Installer
 
-The app keeps a copy of the client file and the token here, outside the project folder:
+Il faut Windows et Python 3.11 ou plus récent ; l'application a été utilisée avec Python 3.13.
+Téléchargez le projet depuis cette page GitHub, avec le bouton « Code » puis « Download ZIP », et
+double-cliquez sur `run.bat`. Le premier lancement installe ce dont l'application a besoin,
+environ 770 Mo, crée les raccourcis et ouvre l'application.
 
-```
-%LOCALAPPDATA%\MicroCompta\secrets\
-```
+Le pas à pas est dans [docs/installation.md](docs/installation.md), et le détail des raccourcis
+Windows dans [docs/raccourci-windows.md](docs/raccourci-windows.md).
 
-Anyone with access to your Windows account can read that folder, as with any file you own. The
-JSON you downloaded can be deleted afterwards. **Sign out** forgets the token on this computer
-and changes nothing in Drive. To revoke the app's access for good, use your Google account's
-security page.
+## Documentation
 
-### What is uploaded, and where
-
-| Kind | When | In Drive |
+| Document | Pour qui | Ce que vous y trouvez |
 | --- | --- | --- |
-| Invoice and credit note PDFs | when issued | `MicroCompta/<year>/factures/` |
-| Receipts attached to a payment | when attached | `MicroCompta/<year>/recus/` |
-| Supporting documents attached to a purchase | when attached | `MicroCompta/<year>/achats/` |
-| CSV and PDF exports | when exported | `MicroCompta/<year>/exports/` |
-| Database snapshot (zipped), ledger CSV, invoice register CSV, purchases register CSV | a few minutes after a change, hourly if changed, and on quit | `MicroCompta/<year>/sauvegardes/` |
+| [Installation](docs/installation.md) | Vous, sur Windows, sans connaissance technique | Installer, mettre à jour, déplacer, désinstaller |
+| [Raccourcis Windows](docs/raccourci-windows.md) | Vous, après l'installation | Créer, recréer ou supprimer les raccourcis, lancer avec Windows |
+| [Guide d'utilisation](docs/guide.md) | Vous, au quotidien | Chaque page de l'application et comment corriger une erreur |
+| [Sauvegarde Google Drive](docs/sauvegarde-drive.md) | Vous, une fois, pour brancher Drive | Créer votre accès Google, ce qui est envoyé et où, restaurer |
+| [Glossaire](docs/glossaire.md) | Vous, quand un terme vous arrête | Chaque terme officiel employé par l'application, avec sa source |
 
-A document counts as **uploaded** only when Drive reports the same checksum as the local file.
-The queue is stored in the database, so it survives a restart:
+Pour signaler un problème ou poser une question, ouvrez une « issue » sur cette page GitHub,
+onglet « Issues ».
 
-- **pending**: waiting, or waiting for a connection or sign-in. Being offline never counts
-  as a failure. Retries back off from 1 minute to 1 hour.
-- **uploaded**: verified.
-- **failed**: needs a look, with the reason shown. Retried every 6 hours, or press **Retry**.
+## Vos données
 
-Nothing is ever deleted from Drive. If a checksum doesn't match, the wrong copy stays there and
-the upload runs again.
+Vos registres, vos documents et votre accès Google sont rangés dans
+`%LOCALAPPDATA%\MicroCompta`, hors du dossier de l'application. Ils ne peuvent donc pas se
+retrouver dans ce projet, et une mise à jour de l'application ne les touche pas.
 
-### Restoring without the app
+## Développement
 
-The CSVs open in any spreadsheet (semicolons, decimal commas, UTF-8). A snapshot is a zipped
-DuckDB database:
+Le code et les tests sont en anglais. Les règles et les registres sont dans `microcompta/core`,
+sans interface. L'envoi vers Drive est dans `microcompta/backup`, et les écrans dans
+`microcompta/ui`. Tous les montants, taux et seuils sont des données datées et modifiables dans
+`microcompta/data/figures_seed.json`, jamais dans le code.
 
-```bash
-python -c "import duckdb; print(duckdb.connect('microcompta.duckdb', read_only=True).sql('SELECT * FROM ledger'))"
-```
-
-To restore on a new computer: install the app, unzip the snapshot to
-`%LOCALAPPDATA%\MicroCompta\microcompta.duckdb` before the first launch, and copy the PDFs back
-into `%LOCALAPPDATA%\MicroCompta\documents\` so the integrity check can find them.
-
-## How the records work
-
-**Payments ledger (livre des recettes).** One entry per payment received, counted on the date
-received. Each stores its gross, rate, fee and net separately. Entries can't be edited: a
-correction is a reversing entry with a reason. Totals every 3 months, exports in CSV and PDF.
-
-**Expenses (registre des achats).** Required in the VAT franchise: a yearly register with the
-detail of purchases of goods and services (art. 286 CGI, [F23266](https://entreprendre.service-public.gouv.fr/vosdroits/F23266)).
-Insert-only and hash-chained like the ledger, in euros, VAT included. It changes no other figure:
-under the micro regime expenses aren't deducted, and nothing in it is declared. The tab also shows
-the flat allowance next to real charges, plus social contributions at the micro rate, as a yardstick
-for the micro-or-real question. It is arithmetic, not advice, and it covers income tax only.
-
-**Invoices.** A monthly summary drafted from that month's payments. Drafts are fine without a
-SIREN, but a final invoice needs a valid one. Numbers are unbroken across all documents and
-years (`FA-2027-0012`, `AV-2027-0013`), chronological, and taken only when issuing succeeds in
-full. An issued invoice can't change. A correction is a credit note.
-
-**USD invoices** follow [economie.gouv.fr](https://www.economie.gouv.fr/entreprises/gerer-son-entreprise-au-quotidien/gerer-sa-comptabilite-et-ses-demarches/comment-facturer-dans-une-monnaie-etrangere):
-the amount in USD, its euro counter-value, and the rate applied, using the ECB's rate of the
-day. You enter the rate from the ECB's site, because the app has no network access beyond Drive.
-The ECB publishes nothing at weekends, so use the last rate and its date.
-
-**The rate on an invoice and the rate in the ledger are separate.** An invoice's euro value uses
-the ECB rate on its issue date. Turnover uses the ledger: each payment's own rate on the date
-received. The Invoices tab shows both numbers when they differ.
-
-**Immutability.** DuckDB has no triggers, so the database can't refuse a change by itself. The
-app's only write route refuses to touch the ledger, the purchases register and the invoice
-register. All three are also hash chains, and issued PDFs are checksummed, so a change made any other way (a direct SQL session, a
-restored file) raises a red banner at the next check. The check runs at launch and every 6 hours.
-
-**Info bubbles.** Hold the mouse over any number, button or line to see what it means. The same
-words are given to screen readers, and Tab onto a number card to show its bubble from the
-keyboard. A test fails if a button, field, number or column has no bubble.
-
-**Figures.** Every limit, rate and fixed date is in effective-dated, editable data under
-**Settings > Figures**, with its source. To change one over time, add a row with a later date.
-Seed values are in `microcompta/data/figures_seed.json` and never overwrite an edit. Sources were
-last checked on 2026-11-04, and a yearly reminder asks you to re-check them.
-
-## Look
-
-A dark theme built from named tokens in `microcompta/ui/theme.py`: surfaces, text levels, one
-accent, status colours, radii and type. `tests/test_theme.py` checks every text colour against
-WCAG AA contrast (4.5:1) on every surface it can sit on, and fails on a colour that isn't a token.
-Headings and figures use Segoe UI Variable Display where Windows 11 has it, and fall back to
-Segoe UI or Inter.
-
-## Language
-
-The app starts in French. English is an option under Settings > Language, and applies straight
-away. Invoices, credit notes and the livre des recettes stay in French either way, because they
-are French legal records. Stored values are language-neutral, so switching can't change a record.
-
-The French follows the wording of the official texts rather than a literal translation, so that it
-matches what URSSAF and the tax office write. [docs/glossaire.md](docs/glossaire.md) gives each term
-and its source, and a test keeps the main ones from drifting.
-
-English is the source language: the text in the code is the key. To add a language, copy
-`microcompta/data/i18n/fr.json` to `<code>.json`, change `language_name`, and translate the
-values. It then appears in Settings with no code change. Tests check that the French catalogue
-covers every string in the code, with matching `{placeholders}`, and that the French screens
-show no English. Number and date formats are in `microcompta/i18n.py`.
-
-## Still open
-
-These aren't settled by the official sources read so far. The app labels them where they matter.
-
-| Question | Who answers | What the app does |
-| --- | --- | --- |
-| Which USD rate for turnover | URSSAF | Rate on each entry, ECB by default. A setting. |
-| Turnover before or after provider fees | URSSAF | Gross by default, a setting. [F23257](https://entreprendre.service-public.gouv.fr/vosdroits/F23257) says no commission or fee is deducted, but doesn't name Stripe or PayPal. |
-| Does a non-EU business client count towards the VAT franchise? | SIE | Per-client flag, excluded by default. Probably right; an inference from BOFiP s.180. |
-| Any invoice mention beyond art. 293 B for a non-EU client | SIE | Editable setting. |
-| Versement libératoire with no French reference income | SIE | Reminder only. |
-| Does ACRE reduce the versement libératoire part? | URSSAF | Assumes not. |
-| Formation professionnelle on top of the flat rate? | URSSAF | Assumes nothing extra, per F36232. |
-| Does a prorated first year count as a year over the ceiling? | URSSAF or SIE | Counts it, and says it's unstated. |
-| A subscription bought from a foreign business | SIE | Listed in the app. [impots.gouv.fr](https://www.impots.gouv.fr/professionnel/questions/je-suis-micro-entrepreneur-ou-la-tete-dune-micro-entreprise-ai-je-des) requires an EU VAT number and self-assessment for services from another EU state, whatever the amount; it doesn't cover non-EU suppliers. |
-| Deadline to opt for a real regime (BNC) | SIE | Listed in the app. BOFiP s.140 and the DGFiP leaflet of March 2026 disagree with F23267. |
-
-## Data location
-
-| What | Where |
-| --- | --- |
-| Database | `%LOCALAPPDATA%\MicroCompta\microcompta.duckdb` |
-| Documents | `%LOCALAPPDATA%\MicroCompta\documents\<year>\<kind>\` |
-| OAuth client and token | `%LOCALAPPDATA%\MicroCompta\secrets\` |
-| Log | `%LOCALAPPDATA%\MicroCompta\logs\` |
-
-Set `MICROCOMPTA_DATA_DIR` to use another folder. Tests and the smoke script always use a
-temporary one, with fake data. The app's only network access is Google's API hosts, enforced in
-one place in `microcompta/backup/drive_client.py`, along with a refusal of any verb that could
-delete.
-
-## Development
+Pour lancer les tests, depuis le dossier du projet :
 
 ```bash
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
@@ -207,16 +114,24 @@ delete.
 .venv\Scripts\python.exe -m pytest tests
 ```
 
-```bash
-.venv\Scripts\python.exe scripts\ui_smoke.py
-```
+Les tests utilisent un dossier temporaire et des données fictives, jamais vos registres. La
+variable d'environnement `MICROCOMPTA_DATA_DIR` permet de choisir ce dossier.
+`scripts\ui_smoke.py` construit la vraie fenêtre hors écran et enregistre des captures dans
+`screenshots\`.
 
-`ui_smoke.py` builds the real window offscreen on fake data and saves `screenshots/`.
-`build_assets.py` regenerates the logo and icon.
+## Licence
 
-Layout: `microcompta/core` holds the records and rules, with no Qt in it. `backup` holds the
-queue, REST client and sign-in. `ui` holds the panels, theme, tray and workers. Structure and
-look follow PolyClusters.
+GNU GPL v3 : voir le fichier [LICENSE](LICENSE).
 
-On Windows, a GUI app started from a shell inside a sandboxed agent may get its data directory
-redirected. Start it through `explorer.exe` if that applies.
+## Prochaines étapes
+
+- Brancher Google Drive avec un vrai compte. La connexion et l'envoi n'ont été essayés que contre
+  un faux Drive dans les tests.
+- Ajouter à la page Échéances l'obligation de recevoir les factures électroniques, en vigueur
+  depuis le 1er septembre 2026. La page ne cite aujourd'hui que l'échéance de 2027.
+- Essayer `run.sh` sur macOS ou Linux. Le script existe, mais personne ne l'a encore lancé.
+- Obtenir les réponses de l'URSSAF et du service des impôts aux questions encore ouvertes. Elles
+  sont listées dans l'application, page Revue annuelle, et dans le
+  [guide](docs/guide.md#ce-qui-reste-à-confirmer).
+- Faire relire les termes employés par un expert-comptable. Ils viennent des textes officiels,
+  mais aucun professionnel ne les a encore vérifiés.

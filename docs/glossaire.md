@@ -7,6 +7,11 @@ pages changent.
 Ce glossaire aide à parler la même langue que l'URSSAF, le service des impôts et les autres
 entrepreneurs. Ce n'est pas un conseil fiscal.
 
+Les sources citées sont d'abord les fiches F de service-public.fr et les pages d'impots.gouv.fr.
+S'y ajoutent la fiche de la DGFiP (Direction générale des finances publiques) et le BOFiP
+(Bulletin officiel des finances publiques), qui publie la doctrine de l'administration fiscale.
+Le CGI est le Code général des impôts.
+
 ## Les régimes
 
 | Terme | Ce que c'est | Source |
@@ -17,7 +22,7 @@ entrepreneurs. Ce n'est pas un conseil fiscal.
 | **Régime réel d'imposition** | Le bénéfice imposable est calculé sur les recettes moins les charges réelles. C'est une option, qui fait sortir du régime micro-fiscal et met fin au micro-social. | [F23267](https://entreprendre.service-public.gouv.fr/vosdroits/F23267) |
 | **Déclaration contrôlée** | Le nom du régime réel pour les BNC. Déclaration n° 2035. | [F23267](https://entreprendre.service-public.gouv.fr/vosdroits/F23267) |
 | **Réel simplifié, réel normal** | Les régimes réels pour les BIC. Déclaration n° 2031. | [F23267](https://entreprendre.service-public.gouv.fr/vosdroits/F23267) |
-| **BNC, BIC** | Bénéfices non commerciaux (activité libérale) et bénéfices industriels et commerciaux (commerce, artisanat). | [F36232](https://entreprendre.service-public.gouv.fr/vosdroits/F36232) |
+| **BNC, BIC** | Bénéfices non commerciaux (activité libérale) et bénéfices industriels et commerciaux (commerce, artisanat et certaines prestations de services). | [F36232](https://entreprendre.service-public.gouv.fr/vosdroits/F36232) |
 | **Versement libératoire** | Le versement libératoire de l'impôt sur le revenu : une façon de payer l'impôt avec les cotisations, en pourcentage du chiffre d'affaires. C'est une option distincte du choix entre micro et réel. | [F36232](https://entreprendre.service-public.gouv.fr/vosdroits/F36232), fiche DGFiP de mars 2026 |
 
 Attention : le mot « réel » sert aussi pour la TVA (régime réel simplifié ou normal de TVA). C'est
@@ -28,7 +33,7 @@ base de TVA, et inversement.
 
 | Terme | Ce que c'est | Source |
 | --- | --- | --- |
-| **Chiffre d'affaires (CA)** | Les recettes encaissées dans la période, hors taxes. Aucune charge n'en est déduite, ni commission ni frais. | [F23257](https://entreprendre.service-public.gouv.fr/vosdroits/F23257) |
+| **Chiffre d'affaires (CA)** | Les recettes encaissées dans la période, hors taxes. Aucune charge n'en est déduite, ni commission ni frais. La fiche ne cite ni Stripe ni PayPal : l'application garde donc la question ouverte pour eux. | [F23257](https://entreprendre.service-public.gouv.fr/vosdroits/F23257) |
 | **Seuil du régime micro** | Le chiffre d'affaires au-delà duquel on peut sortir du régime. Les textes disent « seuil », pas « plafond », même si beaucoup d'entrepreneurs disent « plafond ». | [F23267](https://entreprendre.service-public.gouv.fr/vosdroits/F23267) |
 | **Franchise en base de TVA** | Le régime qui dispense de facturer et de déclarer la TVA. En contrepartie, la TVA sur vos achats n'est pas déductible. | [F21746](https://entreprendre.service-public.gouv.fr/vosdroits/F21746), [BOFiP BOI-TVA-DECLA-40-10-20](https://bofip.impots.gouv.fr/bofip/1079-PGP.html) |
 | **Seuil de franchise** | Le premier seuil de la franchise : au-dessus, la franchise prend fin le 1er janvier suivant. | [F21746](https://entreprendre.service-public.gouv.fr/vosdroits/F21746) |
@@ -39,7 +44,7 @@ base de TVA, et inversement.
 
 | Terme | Ce que c'est | Source |
 | --- | --- | --- |
-| **Cotisations et contributions sociales** | Ce que l'on paie à l'URSSAF, en pourcentage du chiffre d'affaires. On dit souvent « cotisations » tout court. L'application affichait « à mettre de côté » : ce n'est pas un terme officiel. | [F36232](https://entreprendre.service-public.gouv.fr/vosdroits/F36232) |
+| **Cotisations et contributions sociales** | Ce que l'on paie à l'URSSAF, en pourcentage du chiffre d'affaires. On dit souvent « cotisations » tout court. | [F36232](https://entreprendre.service-public.gouv.fr/vosdroits/F36232) |
 | **Déclaration de chiffre d'affaires** | La déclaration à l'URSSAF, tous les mois ou tous les 3 mois, même à zéro avec la mention « Néant ». | [F23257](https://entreprendre.service-public.gouv.fr/vosdroits/F23257) |
 | **Pénalité, majoration, base forfaitaire** | Ce qui s'applique à une déclaration manquante : une pénalité par déclaration, une majoration des cotisations, et des cotisations calculées sur une base forfaitaire. | [F23257](https://entreprendre.service-public.gouv.fr/vosdroits/F23257) |
 | **ACRE** | L'aide à la création ou à la reprise d'une entreprise : un taux de cotisations réduit pendant une durée limitée. | [F11677](https://entreprendre.service-public.gouv.fr/vosdroits/F11677) |
