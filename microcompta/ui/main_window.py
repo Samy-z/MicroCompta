@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from ..backup import oauth
 from ..backup.drive_client import RestDriveClient
-from ..config import APP_ICO, LOGO_DISPLAY_DARK, LOGO_ICON, oauth_client_path, token_path
+from ..config import APP_ICO, LOGO_DISPLAY_DARK, LOGO_ICON, oauth_client_path, stripe_key_path, token_path
 from ..core import clock
 from ..core.book import Book
 from ..core.errors import MissingFigure
@@ -34,6 +34,7 @@ from .panels.ledger_panel import LedgerPanel
 from .panels.payment_form import PaymentForm
 from .panels.purchases_panel import PurchasesPanel
 from .panels.settings_panel import SettingsDialog
+from .panels.stripe_dialog import StripeImportDialog
 from .theme import STYLESHEET, TEXT_3
 from .tray import TrayController
 from .widgets.collapse import CollapsedStrip, DockTitleBar
@@ -338,6 +339,31 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(path)))
 
     # -- settings -----------------------------------------------------------
+    # -- Stripe -------------------------------------------------------------
+    def open_stripe_import(self) -> None:
+        if self._closed:
+            return
+        self.stripe_dialog = StripeImportDialog(self.book, stripe_key_path(), self.fill_from_stripe, self)
+        self.stripe_dialog.open()
+
+    def fill_from_stripe(self, payment: Any, client_id: int | None) -> None:
+        if not self.payment_dock.isVisible():
+            self.expand_dock()
+        self.form.prefill(
+            received_on=payment.paid_on, client_id=client_id, description=payment.description,
+            gross=payment.amount, fee=payment.fee, fee_currency=payment.fee_currency, net=payment.net,
+            net_currency=payment.net_currency, reference=payment.id, provider_rate=payment.provider_rate,
+        )
+        missing = []
+        if not payment.description:
+            missing.append(tr("the description"))
+        if self.form.rate.isEnabled() and not self.form.rate.text().strip():
+            missing.append(tr("the ECB rate of {date}", date=self.form.date.text()))
+        self.set_status(
+            tr("Stripe payment ready in the form. Add {missing}, then record it.", missing=", ".join(missing))
+            if missing else tr("Stripe payment ready in the form. Check it, then record it.")
+        )
+
     def open_settings(self, tab: int = 0) -> None:
         if self._closed:
             return
@@ -386,6 +412,7 @@ class MainWindow(QMainWindow):
             lambda: QTimer.singleShot(0, self.rebuild_for_language)
         )
         self.backup_panel.upload_requested.connect(self.upload_now)
+        self.ledger_panel.stripe_requested.connect(self.open_stripe_import)
         self.backup_panel.snapshot_requested.connect(lambda: self.run_snapshot(announce=True))
         self.backup_panel.sign_in_requested.connect(self.start_sign_in)
         self.backup_panel.sign_out_requested.connect(self.sign_out)
@@ -744,6 +771,8 @@ class MainWindow(QMainWindow):
                            "integrity_timer"):
             getattr(self, timer_name).stop()
         self.settings_dialog.done(0)
+        if getattr(self, "stripe_dialog", None) is not None:
+            self.stripe_dialog.done(0)    # waits for a Stripe reading in flight
         for worker in (self._upload_worker, self._sign_in_worker):
             if worker is not None and worker.isRunning():
                 worker.cancel()

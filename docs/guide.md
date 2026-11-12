@@ -93,6 +93,17 @@ Le livre des recettes est la liste datée de vos encaissements que la loi vous i
 avec une ligne par paiement. Les cartes du haut donnent les totaux de chaque trimestre et de
 l'année, le brut en euros, les frais des services de paiement et les cotisations.
 
+« Importer depuis Stripe… » affiche vos paiements Stripe pas encore saisis. Choisissez-en un, puis
+« Remplir le volet de saisie » : la date, le client, les montants, les frais et la référence
+sont recopiés. Ajoutez le taux BCE du jour, vérifiez, puis enregistrez comme d'habitude. Un
+paiement enregistré disparaît de la liste, et « Ignorer » écarte un paiement de test. Les
+remboursements sont signalés : annulez vous-même l'écriture correspondante.
+
+La première fois, l'application demande une clé restreinte. Créez-la dans votre tableau de bord
+Stripe, rubrique des clés API, avec la seule lecture sur Balance, Charges et Customers. Une clé
+secrète, qui commence par `sk_`, est refusée, car elle donnerait tous les droits sur votre
+compte.
+
 Les boutons servent à annuler une écriture, à joindre un justificatif à la ligne sélectionnée et
 à exporter l'année en CSV, pour un tableur, ou en PDF. Les exports des registres sont toujours en
 français, car ce sont des documents légaux.

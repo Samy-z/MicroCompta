@@ -6,7 +6,8 @@ client failed without truststore and worked with it (requests, httpx and httplib
 
 Two guards are enforced in one place rather than trusted to callers. The verbs are
 GET, POST and PUT only, so this client cannot delete or trash anything. The hosts are
-Google's API hosts only, which is the whole of the app's network access.
+Google's API hosts only. The app's only other network access is reading from Stripe, in
+imports/stripe.py, under its own guards.
 """
 
 from __future__ import annotations

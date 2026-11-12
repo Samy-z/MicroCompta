@@ -41,6 +41,8 @@ class Book:
         self.deadlines = DeadlineBook(self.db, self.figures)
         self.exports = Exports(self)
         self.snapshots = Snapshots(self)
+        from ..imports.stripe import StripeInbox    # imports sit above core
+        self.stripe = StripeInbox(self.db, self.clients)
 
     def profile(self) -> Profile:
         return load_profile(self.db)

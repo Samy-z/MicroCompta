@@ -82,6 +82,7 @@ class ReverseDialog(FittedDialog):
 class LedgerPanel(QWidget):
     changed = Signal()
     status = Signal(str)
+    stripe_requested = Signal()
 
     def __init__(self, book: Book, parent: QWidget | None = None):
         super().__init__(parent)
@@ -118,6 +119,10 @@ class LedgerPanel(QWidget):
         layout.addWidget(self.totals)
 
         self.table = DataTable(_columns(), key="seq")
+        self.stripe_button = self.table.add_button(tr("Import from Stripe…"), self.stripe_requested.emit, tip=tr(
+            "Shows the Stripe payments not recorded yet. Choosing one fills the payment form, where "
+            "you check it and record it yourself."
+        ))
         self.reverse_button = self.table.add_button(
             tr("Reverse entry…"), self.reverse_selected, danger=True,
             tip=tr("Entries can't be edited. This adds a reversing entry with a reason."),

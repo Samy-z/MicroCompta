@@ -69,3 +69,8 @@ def oauth_client_path() -> Path:
 
 def token_path() -> Path:
     return secrets_dir() / "google_token.json"
+
+
+def stripe_key_path() -> Path:
+    """The restricted Stripe key, read only. Beside the Google token, outside the project."""
+    return secrets_dir() / "stripe_key.txt"

@@ -38,6 +38,8 @@ from microcompta.ui.panels.invoices_panel import CreditDialog, EditDraftDialog, 
 from microcompta.ui.panels.ledger_panel import ReverseDialog  # noqa: E402
 from microcompta.ui.panels.purchases_panel import PurchaseDialog, ReversePurchaseDialog  # noqa: E402
 from microcompta.ui.panels.settings_panel import FigureDialog  # noqa: E402
+from microcompta.ui.panels.stripe_dialog import StripeImportDialog  # noqa: E402
+from microcompta.imports.stripe import StripeKeyError, StripePayment, StripeReading, save_key  # noqa: E402
 from microcompta.ui.widgets.table_view import DataTable  # noqa: E402
 from microcompta.ui.widgets.threshold_bar import ThresholdBar  # noqa: E402
 from microcompta.ui import theme  # noqa: E402
@@ -1210,6 +1212,164 @@ def test_the_plus_button_still_works_after_a_language_switch(book, demo, qapp, t
     win._finish_quit(None)
 
 
+# -- importing from Stripe ------------------------------------------------------
+FAKE_STRIPE_KEY = "rk_test_FAKEKEY0123456789abcdef"
+STRIPE_PAYMENT = StripePayment(
+    id="ch_fake_1", paid_on=date(2026, 10, 31), amount=D("1020"), currency="USD", fee=D("27.61"),
+    fee_currency="EUR", net=D("914.83"), net_currency="EUR", provider_rate=D("1.082284"),
+    description="Annotation work, week 44", customer_name="Acme Annotation LLC", customer_email="",
+)
+
+
+class FakeStripe:
+    def __init__(self, reading: StripeReading | None = None, error: Exception | None = None):
+        self.reading = reading or StripeReading([STRIPE_PAYMENT])
+        self.error = error
+        self.reads = 0
+
+    def read(self, _since: date) -> StripeReading:
+        self.reads += 1
+        if self.error:
+            raise self.error
+        return self.reading
+
+
+def _stripe_dialog(win: Any, book: Any, tmp_path: Path, *, key: bool = True, **fake: Any) -> StripeImportDialog:
+    path = tmp_path / "stripe_key.txt"
+    if key:
+        save_key(path, FAKE_STRIPE_KEY)
+    source = FakeStripe(**fake)
+    return StripeImportDialog(book, path, win.fill_from_stripe, win, source_factory=lambda _key: source,
+                              threaded=False)
+
+
+def test_payments_has_an_import_from_stripe_button(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path, language="fr")
+    assert win.ledger_panel.stripe_button.text() == "Importer depuis Stripe…"
+    assert win.ledger_panel.stripe_button.toolTip()
+    win._finish_quit(None)
+
+
+def test_without_a_key_the_window_asks_for_one(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path, key=False)
+    assert not dialog.key_row.isHidden() and dialog.saved_row.isHidden()
+    assert not dialog.refresh_button.isEnabled()
+    assert dialog.table.model.rows == []
+    win._finish_quit(None)
+
+
+def test_a_secret_key_is_refused_and_not_saved(book, demo, qapp, tmp_path, warnings):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path, key=False)
+    dialog.key_field.setText("sk_" + "live_FAKEKEY0123456789abcdef")    # in two parts for secret scanners
+    assert dialog.save_key() is False
+    assert "secret key" in warnings[0]
+    assert not (tmp_path / "stripe_key.txt").exists()
+    assert dialog.key_field.text() == ""          # not left on screen either
+    win._finish_quit(None)
+
+
+def test_a_restricted_key_is_saved_and_the_payments_read(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path, key=False)
+    dialog.key_field.setText(FAKE_STRIPE_KEY)
+    assert dialog.save_key() is True
+    assert dialog.key_row.isHidden() and not dialog.saved_row.isHidden()
+    assert FAKE_STRIPE_KEY not in dialog.key_label.text() and FAKE_STRIPE_KEY[-4:] in dialog.key_label.text()
+    assert [r["id"] for r in dialog.table.model.rows] == ["ch_fake_1"]
+    assert dialog.table.model.rows[0]["client"] == "Acme Annotation LLC"
+    assert dialog.summary.text() == "1 payment to record."
+    win._finish_quit(None)
+
+
+def test_choosing_a_payment_fills_the_form_and_leaves_the_ecb_rate_to_you(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path)
+    dialog.fill_selected()
+    form = win.form
+    assert from_qdate(form.date.date()) == date(2026, 10, 31)
+    assert form.client.currentText() == "Acme Annotation LLC"
+    assert form.description.text() == "Annotation work, week 44"
+    assert form.method.currentData() == "Stripe"
+    assert form.reference.text() == "ch_fake_1"
+    assert (form.gross.text(), form.fee.text(), form.net.text()) == ("1,020.00", "27.61", "914.83")
+    assert (form.fee_currency.currentText(), form.net_currency.currentText()) == ("EUR", "EUR")
+    assert form.rate.text() == "" and form.rate_source.currentData() == "ECB reference"
+    assert "ECB rate" in win.status_label.text()
+    assert dialog.result() == QDialog.Accepted
+    win._finish_quit(None)
+
+
+def test_under_the_provider_setting_the_stripe_rate_is_used(book, demo, qapp, tmp_path):
+    profile = book.profile()
+    profile.fx_policy = "provider_effective"
+    book.save_profile(profile)
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    _stripe_dialog(win, book, tmp_path).fill_selected()
+    assert win.form.rate.text() == "1.082284"
+    assert win.form.rate_source.currentData() == "Provider rate"
+    assert "Check it" in win.status_label.text()
+    win._finish_quit(None)
+
+
+def test_a_recorded_payment_is_no_longer_offered(book, demo, qapp, tmp_path, monkeypatch):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    _stripe_dialog(win, book, tmp_path).fill_selected()
+    win.form.rate.setText("1.0823")
+    monkeypatch.setattr(win.form, "_confirm", lambda _s: True)
+    seq = win.form.record()
+    assert book.ledger.get(seq)["provider_ref"] == "ch_fake_1"
+    assert book.ledger.get(seq)["fee_currency"] == "EUR"
+    again = _stripe_dialog(win, book, tmp_path)
+    assert again.table.model.rows == []
+    assert again.summary.text() == "0 payments to record."
+    win._finish_quit(None)
+
+
+def test_an_ignored_payment_is_no_longer_offered(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path)
+    dialog.dismiss_selected()
+    assert dialog.table.model.rows == []
+    assert _stripe_dialog(win, book, tmp_path).table.model.rows == []
+    assert book.ledger.entries() and all(e["provider_ref"] != "ch_fake_1" for e in book.ledger.entries())
+    win._finish_quit(None)
+
+
+def test_refunds_are_pointed_out(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path, reading=StripeReading([STRIPE_PAYMENT], refunds=2))
+    assert "2 refund(s)" in dialog.summary.text()
+    win._finish_quit(None)
+
+
+def test_a_stripe_error_shows_in_the_window(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path, error=StripeKeyError("Stripe refused the key: Invalid API Key"))
+    assert not dialog.problem.isHidden()
+    assert "Invalid API Key" in dialog.problem.label.text()
+    assert dialog.table.model.rows == [] and dialog.refresh_button.isEnabled()
+    win._finish_quit(None)
+
+
+def test_a_folded_payment_form_opens_to_show_the_payment(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    win.collapse_dock()
+    _stripe_dialog(win, book, tmp_path).fill_selected()
+    assert win.payment_dock.isVisible()
+    win._finish_quit(None)
+
+
+def test_forgetting_the_key(book, demo, qapp, tmp_path):
+    win = make_window(book, qapp, state="no_client", tmp=tmp_path)
+    dialog = _stripe_dialog(win, book, tmp_path)
+    dialog.forget()
+    assert not (tmp_path / "stripe_key.txt").exists()
+    assert not dialog.key_row.isHidden() and dialog.table.model.rows == []
+    win._finish_quit(None)
+
+
 # -- the rate follows the client's currency ------------------------------------
 def _usd_and_eur_clients(book: Any, form: Any) -> tuple[int, int]:
     """Two clients, whatever the demo holds, and the form's list refreshed."""
@@ -1651,6 +1811,7 @@ def _every_dialog(book: Any, win: MainWindow, demo: dict[str, Any]) -> list[QWid
         CreditDialog("FA-2026-0001", win),
         ClientDialog(None, win),
         FigureDialog(figure, win),
+        StripeImportDialog(book, config.secrets_dir() / "no_stripe_key.txt", lambda *_a: None, win, threaded=False),
     ]
 
 

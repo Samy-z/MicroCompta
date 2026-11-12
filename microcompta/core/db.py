@@ -14,7 +14,7 @@ from ..config import db_path
 from ..i18n import tr
 from .errors import ImmutableError
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key VARCHAR PRIMARY KEY, value VARCHAR);
@@ -173,6 +173,10 @@ CREATE TABLE IF NOT EXISTS upload_queue (
 );
 
 CREATE TABLE IF NOT EXISTS drive_folders (path VARCHAR PRIMARY KEY, folder_id VARCHAR NOT NULL);
+
+-- Stripe payments set aside on purpose, so they stop being offered. Recorded ones are
+-- recognised by their reference in the ledger instead.
+CREATE TABLE IF NOT EXISTS stripe_dismissed (id VARCHAR PRIMARY KEY, dismissed_at TIMESTAMP NOT NULL);
 
 CREATE TABLE IF NOT EXISTS deadline_state (
     key          VARCHAR PRIMARY KEY,

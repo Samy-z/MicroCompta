@@ -60,7 +60,7 @@ Clients. Le [guide d'utilisation](guide.md) décrit la suite.
 | --- | --- |
 | Vos registres (la base de données) | `%LOCALAPPDATA%\MicroCompta\microcompta.duckdb` |
 | Factures, justificatifs et exports | `%LOCALAPPDATA%\MicroCompta\documents\<année>\<type>\` |
-| Votre accès à Google Drive | `%LOCALAPPDATA%\MicroCompta\secrets\` |
+| Votre accès à Google Drive et votre clé Stripe | `%LOCALAPPDATA%\MicroCompta\secrets\` |
 | Le journal de l'application | `%LOCALAPPDATA%\MicroCompta\logs\` |
 
 `%LOCALAPPDATA%` désigne votre dossier `C:\Users\<votre nom>\AppData\Local`. Pour l'ouvrir,

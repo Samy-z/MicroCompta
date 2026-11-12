@@ -37,6 +37,7 @@ _SECRET_PATTERNS = (
     re.compile(r"(?i)(access_token|refresh_token|client_secret|authorization|code)[\"']?\s*[:=]\s*[\"']?[^\s\"',&]+"),
     re.compile(r"(?i)bearer\s+[\w\-.]+"),
     re.compile(r"upload_id=[\w\-.]+"),
+    re.compile(r"\b[rs]k_(live|test)_[\w*]+"),
 )
 
 

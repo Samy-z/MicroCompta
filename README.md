@@ -35,7 +35,8 @@ motivée, comme le veut un registre comptable.
 ## Ce que fait l'application
 
 - **Livre des recettes**, page Recettes : une écriture par encaissement, avec ses totaux
-  trimestriels et ses exports CSV et PDF.
+  trimestriels et ses exports CSV et PDF. Vos paiements Stripe peuvent pré-remplir la saisie :
+  vous les vérifiez puis les enregistrez vous-même.
 - **Registre des achats**, page Dépenses : vos dépenses professionnelles et leurs justificatifs.
   Il est obligatoire pour une activité libérale en franchise en base de TVA, c'est-à-dire quand
   vous ne facturez pas la TVA.
@@ -65,8 +66,9 @@ la rédaction des textes officiels ; le [glossaire](docs/glossaire.md) donne cha
   l'administration. Les micro-entreprises devront aussi en émettre à partir du
   1er septembre 2027. Les détails sont sur
   [economie.gouv.fr](https://www.economie.gouv.fr/tout-savoir-sur-la-facturation-electronique-pour-les-entreprises).
-- Elle ne se connecte qu'à Google Drive. Le code qui parle à Drive n'a aucune commande de
-  suppression, et des tests vérifient qu'il refuse toute autre adresse que celles de Google.
+- Elle ne se connecte qu'à Google Drive et, si vous le branchez, à Stripe en lecture seule. Le
+  code n'a aucune commande de suppression vers Drive ni d'écriture vers Stripe, et des tests
+  vérifient qu'il refuse toute autre adresse.
 
 ## Installer
 

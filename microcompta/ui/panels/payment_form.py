@@ -202,6 +202,33 @@ class PaymentForm(QScrollArea):
         self.date.setMaximumDate(to_qdate(clock.today()))
         self._on_client()
 
+    def prefill(self, *, received_on: Any, client_id: int | None, description: str, gross: Decimal,
+                fee: Decimal, fee_currency: str, net: Decimal, net_currency: str, reference: str,
+                method: str = "Stripe", provider_rate: Decimal | None = None) -> None:
+        """Fill the form from a payment read elsewhere. Nothing is recorded: that stays your click.
+
+        The rate follows the turnover setting: the provider's own rate under the provider setting,
+        otherwise empty, for the ECB rate of the day as with any payment."""
+        if client_id is not None and self.client.findData(client_id) >= 0:
+            self.client.setCurrentIndex(self.client.findData(client_id))
+        self.date.setDate(to_qdate(received_on))
+        self.description.setText(description)
+        if self.method.findData(method) >= 0:
+            self.method.setCurrentIndex(self.method.findData(method))
+        self.reference.setText(reference)
+        self.gross.setText(fmt_number(gross))
+        for combo, currency in ((self.fee_currency, fee_currency), (self.net_currency, net_currency)):
+            if combo.findText(currency) >= 0:
+                combo.setCurrentIndex(combo.findText(currency))
+        self.fee.setText(fmt_number(fee))
+        self.net.setText(fmt_number(net))
+        if self.rate.isEnabled():     # not a euro client
+            use_provider = self.book.profile().fx_policy == "provider_effective" and provider_rate
+            self.rate.setText(fmt_rate(provider_rate) if use_provider else "")
+            source = "Provider rate" if use_provider else "ECB reference"
+            self.rate_source.setCurrentIndex(max(0, self.rate_source.findData(source)))
+        self._update_preview()
+
     def add_client(self) -> None:
         """What is already typed in the form stays, so a payment can carry on from here."""
         client = ask_for_new_client(self.book, self)

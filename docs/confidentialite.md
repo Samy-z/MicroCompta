@@ -30,12 +30,24 @@ respecte la
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 y compris ses exigences d'utilisation limitée.
 
+## Ce qu'elle fait avec Stripe
+
+Si vous branchez Stripe, l'application lit vos paiements avec une clé restreinte que vous créez
+en lecture seule. Elle n'écrit rien chez Stripe. Elle lit, pour chaque paiement, la date, le
+montant, les frais, le net, la description, ainsi que le nom et l'e-mail du client pour trouver
+le bon client dans l'application. Ces données ne vont que dans le volet de saisie, sur votre
+ordinateur. La clé est gardée dans `%LOCALAPPDATA%\MicroCompta\secrets` et n'est envoyée qu'à
+Stripe.
+
 ## Retirer l'accès
 
 Dans l'application, page Sauvegarde, « Se déconnecter » efface le jeton de votre ordinateur. Pour
 retirer l'accès côté Google, passez par la page
 [Applications tierces](https://myaccount.google.com/connections) de votre compte Google. Les
 fichiers déjà envoyés restent dans votre Drive, où vous pouvez les supprimer vous-même.
+
+Pour Stripe, « Oublier la clé » dans la fenêtre d'import l'efface de votre ordinateur. Supprimez-la
+aussi dans votre tableau de bord Stripe pour qu'elle ne serve plus nulle part.
 
 ## Contact
 
